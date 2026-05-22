@@ -1,0 +1,53 @@
+# --- Build artifacts (Yocto / R5 / Linux) ---
+build/
+build-*/
+tmp/
+tmp-*/
+sstate-cache/
+downloads/
+deploy/
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.elf
+*.bin
+*.hex
+*.map
+*.d
+*.lst
+
+# --- Toolchain / SDK output ---
+sdk/
+sysroots/
+poky/
+meta-*/
+
+# --- AI model intermediates ---
+*.onnx
+*.tflite
+*.engine
+*.npu
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- IDE / Editor metadata ---
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*~
+
+# --- OS metadata ---
+Thumbs.db
+ehthumbs.db
+.DS_Store
+desktop.ini
+
+# --- Logs / temporary ---
+*.log
+*.tmp
+*.cache
