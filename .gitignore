@@ -52,13 +52,7 @@ desktop.ini
 *.tmp
 *.cache
 
-# --- Telechips VCP-G BSP (local clone, do not commit wholesale ~76MB) ---
-# Whitelist only LDAR overlay paths. Build output (.rom) commits via `git add -f`.
-vcp-g/topst-vcp/**
-!vcp-g/topst-vcp/sources/
-!vcp-g/topst-vcp/sources/app.sample/
-!vcp-g/topst-vcp/sources/app.sample/rules.mk
-!vcp-g/topst-vcp/sources/app.sample/app.base/
-!vcp-g/topst-vcp/sources/app.sample/app.base/main.c
-!vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/
-!vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/**
+# --- Backup stash (트리에서 들어낸 중복본 / 빌드 산출물 — 추적 안 함) ---
+# 기존 추적 파일(중간발표 PDF)은 그대로 유지되고, 아래 항목만 무시
+backup/topst-vcp-edu/
+backup/vcp-g/

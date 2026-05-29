@@ -1,0 +1,126 @@
+//===========================================================================
+//
+//                       Load Bootlaoder for TCC803x (R5)
+//
+//                        EDIT HISTORY FOR MODULE
+//
+//---------------------------------------------------------------------------
+// version     who      history
+//---------------------------------------------------------------------------
+// 160727    Sangwon    Create file
+//===========================================================================
+
+
+system.option rb on
+system.option.mmu off
+system.option.enreset off
+system.option.trst on
+system.jtagclock 10mhz
+
+sys.cpu CortexR5
+sys.CONFIG.DEBUGACCESSPORT 1
+sys.CONFIG.AHBACCESSPORT 0
+sys.config corebase	0x80410000
+sys.m.prepare
+
+//D.S EZAHB:0x14400014 %LE %Long 0x02000000
+//D.A EZAHB:0xF1000000 wfi
+D.S EZAHB:0x1B931020 %LE %Long 0xFFFFFFFF // sw reset
+
+sys.m.a
+
+if run()
+	Break
+
+print "Serial Flash GPIO Port CFG"
+D.S AZSD:0x0:0x14200430 %LE %Long 0x11111111 
+D.S AZSD:0x0:0x14200434 %LE %Long 0x00000111
+
+
+D.S AZSD:0x0:0x1BFF1100 %LE %Long 0x00000000
+
+//  *(volatile unsigned int *)(SFMC_REG_MODE) = SFMC_REG_MODE_FLASH_RESET;
+D.S AZSD:0x0:0x18910024 %LE %Long 0x00000001 
+
+&SFMC_CLK=24.
+
+if &SFMC_CLK==166.
+(
+	// PERI_SFMC Clk: 166MHz
+	D.S AZSD:0x0:0x18910028 %LE %Long 0x00040430
+	D.S AZSD:0x0:0x1891002C %LE %Long 0x00000500 
+)
+else
+(
+	// PERI_SFMC Clk: 24MHz
+	D.S AZSD:0x0:0x18910028 %LE %Long 0x00040200
+	D.S AZSD:0x0:0x1891002C %LE %Long 0x00000400 
+)
+
+print "Serial Flash CMD Setting"
+
+//Set CMD
+D.S AZSD:0x0:0x18910904 %LE %Long 0x8400009F
+D.S AZSD:0x0:0x18910908 %LE %Long 0x20004000 
+D.S AZSD:0x0:0x1891090C %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910910 %LE %Long 0x84000005 
+D.S AZSD:0x0:0x18910914 %LE %Long 0x20004000 
+D.S AZSD:0x0:0x18910918 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x1891091C %LE %Long 0xA4000006 
+D.S AZSD:0x0:0x18910920 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910924 %LE %Long 0x84000004 
+D.S AZSD:0x0:0x18910928 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x1891092C %LE %Long 0xA40000B7 
+D.S AZSD:0x0:0x18910930 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910934 %LE %Long 0xA40000B7 
+D.S AZSD:0x0:0x18910938 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x1891093C %LE %Long 0x40002040 
+D.S AZSD:0x0:0x18910940 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910944 %LE %Long 0x8B00728D
+D.S AZSD:0x0:0x18910948 %LE %Long 0x8F000000 
+D.S AZSD:0x0:0x1891094C %LE %Long 0xAB000000 
+D.S AZSD:0x0:0x18910950 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910954 %LE %Long 0x8C720000 
+D.S AZSD:0x0:0x18910958 %LE %Long 0xAC000001 
+D.S AZSD:0x0:0x1891095C %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910960 %LE %Long 0x8400000C 
+D.S AZSD:0x0:0x18910964 %LE %Long 0x48000000 
+D.S AZSD:0x0:0x18910968 %LE %Long 0x44001000 
+D.S AZSD:0x0:0x1891096C %LE %Long 0x28000000 
+D.S AZSD:0x0:0x18910970 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910974 %LE %Long 0x84000012 
+D.S AZSD:0x0:0x18910978 %LE %Long 0x40004040 
+D.S AZSD:0x0:0x1891097C %LE %Long 0x60100000 
+D.S AZSD:0x0:0x18910980 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910984 %LE %Long 0x84000020 
+D.S AZSD:0x0:0x18910988 %LE %Long 0xA4003100 
+D.S AZSD:0x0:0x1891098C %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x18910990 %LE %Long 0x840000DC 
+D.S AZSD:0x0:0x18910994 %LE %Long 0x60004040 
+D.S AZSD:0x0:0x18910998 %LE %Long 0xF4000000 
+D.S AZSD:0x0:0x1891099C %LE %Long 0x8400006C 
+D.S AZSD:0x0:0x189109A0 %LE %Long 0x48000000 
+D.S AZSD:0x0:0x189109A4 %LE %Long 0x44001000 
+D.S AZSD:0x0:0x189109A8 %LE %Long 0x2A000000 
+D.S AZSD:0x0:0x189109AC %LE %Long 0xF4000000
+// Set CMD end
+
+
+// Auto Read mode enable
+D.S AZSD:0x0:0x18910020 %LE %Long 0x00000960 	// Set CMD_AUTO_ADDR
+D.S AZSD:0x0:0x18910010 %LE %Long 0x00000010 	// CMD RUN
+
+// GHC
+//cd Y:\work\tcc8020_micom
+//cd Y:\work\temp\hud
+//d.load.elf tcc8020 /RELPATH /PATH ./ /nocode
+
+// GCC
+cd ../../../build/tcc803x
+d.load.elf output/boot /RELPATH /PATH ./ /nocode
+
+R.S PC 0xd0044000
+
+data.list
+
+enddo

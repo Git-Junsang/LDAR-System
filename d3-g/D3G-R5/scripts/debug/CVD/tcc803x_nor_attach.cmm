@@ -1,0 +1,40 @@
+//===========================================================================
+//
+//                       Load Bootlaoder for TCC802x (A7)
+//
+//                        EDIT HISTORY FOR MODULE
+//
+//---------------------------------------------------------------------------
+// version     who      history
+//---------------------------------------------------------------------------
+// 160727    Sangwon    Create file
+//===========================================================================
+
+
+sys.cpu CortexR5
+
+option.RTCK OFF
+option.TRST ON
+option.ResBreak ON
+option.DACR ON
+option.CR OFF
+
+sys.CONFIG.DEBUGACCESSPORT 1
+sys.CONFIG.AHBACCESSPORT 0
+sys.config corebase	0x80410000
+sys.mode.attach
+
+if run()
+	Break
+
+//gcc
+cd ../../../build/tcc803x/gcc
+d.load.elf output/boot /RELPATH /PATH ./ /nocode
+
+//ghc
+//cd ../../..
+//d.load.elf tcc8030 /RELPATH /PATH ./ /nocode
+
+data.list
+
+enddo

@@ -6,7 +6,7 @@
 
 - 팀: **서준상**(전자전기 — 제어 측), **정은진**(소프트웨어 — 인지 측)
 - 학기: 2026년 1학기 중앙대 고급프로젝트 (TOPST Advanced Project)
-- 중간발표 자료: [LDAR_차선이탈자동복귀시스템_중간발표.pdf](LDAR_차선이탈자동복귀시스템_중간발표.pdf)
+- 중간발표 자료: [LDAR_차선이탈자동복귀시스템_중간발표.pdf](documents/Project_Presentation/LDAR_차선이탈자동복귀시스템_중간발표.pdf)
 
 ---
 
@@ -92,15 +92,51 @@ BOARD_OVERRIDE ──(거리>Tout · 홀드시간 Th · heading 평행)───
 
 ```
 LDAR-System/
-├── ai-g/          # Sensing Zone (정은진) — 카메라 캡처, NPU 추론(MobileNet-V2+U-Net/UFLD), 후처리, TCP 송신
-├── d3-g/          # HPC Zone (서준상)
-│   ├── a72/       #   판정 앱 — 차선 데이터 수신, 이탈감지, 상태머신, P 복귀각, IPC 송신
-│   └── r5/        #   IPC 수신 ↔ CAN 송수신 (0x110/0x111/0x106/0x107 송신, 0x120 수신)
-├── vcp-g/         # Control Zone (서준상) — 조이스틱 ADC, 제어권 중재, 모터/서보/LED/버저 (can_vcp_ctrl.c 확장)
-├── shared/        # 공용 프로토콜 정의 (CAN ID·페이로드, IPC 패킷) — 단일 소스
-├── documents/     # 텔레칩스 팹리스 교육과정 D01-D10 PDF (참고 자료)
+├── ai-g/                              # Sensing Zone (정은진)
+│   ├── ai-g app/                      #   AI-G 보드 런타임 바이너리 (motrex_app, tcnnapp)
+│   ├── ai_model/                      #   변환된 NPU 모델 (yolov8s.bin, yolov8s_extracted.onnx)
+│   └── qt/                            #   QT 계기판 자산 (test.obj)
+│
+├── d3-g/                              # HPC Zone (서준상)
+│   ├── a72/                           #   A72 판정 앱 (ldar_listener.c + Makefile) — IPC로 R5에 송신
+│   ├── d3-g app/                      #   A72↔R5 IPC 파이썬 라이브러리·예제
+│   │   ├── IPC_Example.py
+│   │   └── Library/IPC_Library.py
+│   ├── D3G-R5/                        #   R5 BSP 풀트리 (edu-motrex 기반, 외부 git)
+│   │   ├── sources/                   #     app.drivers / app.sample / core / dev.drivers / os / sal
+│   │   ├── scripts/debug/
+│   │   └── tools/                     #     cangaroo, fwdn_v8, tcmktool, FWUG.zip
+│   ├── r5/                            #   R5 LDAR 모듈 (D3G-R5 BSP의 app.sample에 오버레이될 소스)
+│   │   └── sources/app.ldar.bridge/   #     ldar_bridge.{c,h} + rules.mk — IPC↔CAN 브리지
+│   └── shared/                        #   A72↔R5 공용 헤더 (ldar_ipc_proto.h)
+│
+├── vcp-g/                             # Control Zone (서준상)
+│   ├── flash/                         #   플래시 패키지 — 이 폴더만 있으면 ./flash.sh 한 줄로 굽기
+│   │   ├── fwdn                       #     Linux fwdn 바이너리
+│   │   ├── vcp_fwdn.rom               #     FWDN 1단 로더
+│   │   ├── tcc70xx_pflash_boot_2M_ECC.rom  #  최신 빌드 산출물 (git 추적)
+│   │   └── flash.sh                   #     원-라이너 래퍼 (sudo 자동 요청)
+│   └── topst-vcp/                     #   VCP-G BSP (FreeRTOS-VCP) — BSP 자체는 untracked, LDAR 소스·산출물만 git에 -f로 추가
+│       ├── sources/app.sample/
+│       │   ├── app.ldar.vcp/          #     LDAR 모듈: joystick_adc/sw, motor_dir/pwm, servo_pwm, turn_can/led/signal,
+│       │   │                          #              ldar_app, ldar_pins, pwm_util, rules.mk
+│       │   ├── app.base/main.c        #     LDAR_Run() 호출 패치 (MCU_BSP_SUPPORT_APP_LDAR_VCP 가드)
+│       │   └── rules.mk               #     빌드 플래그(MCU_BSP_BUILD_FLAGS_TEST_APP_*) ON/OFF
+│       ├── build/tcc70xx/gcc/         #     빌드 산출물 위치 — output/tcc70xx_pflash_boot_2M_ECC.rom
+│       └── tools/fwdn_vcp/            #     원본 fwdn 툴 (Linux/Windows 둘 다) — 실 사용은 vcp-g/flash/ 쪽
+│
+├── documents/                         # 참고 자료
+│   ├── tutorials/                     #   텔레칩스 팹리스 교육과정 D01–D10 + 종합본 PDF, VCP-G Docs.pdf
+│   ├── d3g_references/                #   TCC805x MCU BSP API Specification PDF 모음 (GPIO/ADC/CAN/IPC/PMIO/SAL 등)
+│   └── Project_Presentation/          #   LDAR 중간발표 PDF
+│
+├── CLAUDE.md                          # 작업 지침 (README가 정의의 단일 출처)
 └── README.md
 ```
+
+- **공용 프로토콜 헤더 위치**: `d3-g/shared/ldar_ipc_proto.h` (A72↔R5 IPC 패킷 정의)
+- **R5 BSP는 두 군데로 분리**: 풀트리는 `d3-g/D3G-R5/`(외부 git), LDAR 전용 추가 모듈은 `d3-g/r5/sources/app.ldar.bridge/` — 빌드 시 BSP 트리에 오버레이
+- **VCP-G도 두 군데로 분리**: BSP는 `vcp-g/topst-vcp/`(untracked), LDAR 모듈은 그 안의 `sources/app.sample/app.ldar.vcp/`에 직접 둠. 플래시 산출물·도구는 `vcp-g/flash/`로 모아 git 추적
 
 ---
 
@@ -355,6 +391,6 @@ A72에 SocketCAN(`can0`)이 **없음** → D3-G에서 `candump` 불가. CAN은 R
 
 ## 참고 자료
 
-- [LDAR 중간발표 PDF](LDAR_차선이탈자동복귀시스템_중간발표.pdf) — 모든 정의의 출처
+- [LDAR 중간발표 PDF](documents/Project_Presentation/LDAR_차선이탈자동복귀시스템_중간발표.pdf) — 모든 정의의 출처
 - [documents/](documents/) — 텔레칩스 팹리스 교육과정 D01-D10 PDF (CAN/IPC/VCP/AI-G 구현 참고)
 - 재사용 교육 코드: VCP-G CAN Task(`can_vcp_ctrl.c`, D04-T04~05), VCP ADC/GPIO/PDM(D02-T04~06), R5 CAN(D04-T01~02), IPC APP(D04-T06)

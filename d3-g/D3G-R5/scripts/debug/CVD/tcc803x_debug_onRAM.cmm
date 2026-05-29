@@ -1,0 +1,42 @@
+//===========================================================================
+//
+//                       Load Bootlaoder for TCC802x (A7)
+//
+//                        EDIT HISTORY FOR MODULE
+//
+//---------------------------------------------------------------------------
+// version     who      history
+//---------------------------------------------------------------------------
+// 160727    Sangwon    Create file
+//===========================================================================
+
+
+system.option rb on
+system.option.mmu off
+system.option.enreset off
+system.option.trst on
+system.jtagclock 10mhz
+
+sys.cpu CortexR5
+sys.CONFIG.DEBUGACCESSPORT 1
+sys.CONFIG.AHBACCESSPORT 0
+sys.config corebase	0x80410000
+sys.m.prepare
+
+; initialize RTOS support
+
+D.S EZAHB:0x14400014 %LE %Long 0x02000000
+D.A EZAHB:0xF1000000 wfi
+D.S EZAHB:0x17000004 %LE %Long 0xFFFFFFFF
+
+sys.m.a
+
+if run()
+	Break
+
+cd ../../../build/tcc803x
+d.load.elf output/boot /RELPATH /PATH ./
+
+data.list
+
+enddo

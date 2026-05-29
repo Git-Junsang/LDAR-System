@@ -9,7 +9,7 @@
 
 - 팀: **서준상**(전자전기 — 제어 측: VCP-G + D3-G), **정은진**(소프트웨어 — 인지 측: AI-G)
 - 학기: 2026년 1학기 중앙대 고급프로젝트 (TOPST Advanced Project)
-- 중간발표 자료: [LDAR_차선이탈자동복귀시스템_중간발표.pdf](LDAR_차선이탈자동복귀시스템_중간발표.pdf)
+- 중간발표 자료: [LDAR_차선이탈자동복귀시스템_중간발표.pdf](documents/Project_Presentation/LDAR_차선이탈자동복귀시스템_중간발표.pdf)
 
 ## Architecture (3-Zonal)
 
@@ -124,7 +124,7 @@ BOARD_OVERRIDE ──(거리>Tout · 홀드시간 Th · heading 평행)───
 - [vcp-g/](vcp-g/) — Control Zone (서준상): 조이스틱 ADC, 제어권 중재, 모터·서보·LED·버저 (`can_vcp_ctrl.c` 확장)
 - `shared/` — 공용 프로토콜 정의 (CAN ID·페이로드, IPC 패킷) — 단일 소스
 - [documents/](documents/) — 텔레칩스 팹리스 교육과정 D01-D10 PDF (참고 자료)
-- [LDAR_차선이탈자동복귀시스템_중간발표.pdf](LDAR_차선이탈자동복귀시스템_중간발표.pdf) — 중간발표 자료
+- [LDAR_차선이탈자동복귀시스템_중간발표.pdf](documents/Project_Presentation/LDAR_차선이탈자동복귀시스템_중간발표.pdf) — 중간발표 자료
 
 ## Current Status
 

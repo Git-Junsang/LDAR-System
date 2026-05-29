@@ -1,0 +1,48 @@
+//===========================================================================
+//
+//                       Load Bootlaoder for TCC805x (R5)
+//
+//===========================================================================
+
+GLOBAL &outputPath
+GLOBAL &netSrcPath
+GLOBAL &realSrcPath
+
+//---------------------------------------------------------------------------
+// Set Environment 
+//---------------------------------------------------------------------------
+&outputPath="Z:\Devel\MCU-BSP\tcc805x\"
+&netSrcPath="Z:"
+&realSrcPath="\home\B170091"
+
+//---------------------------------------------------------------------------
+// Debugging 
+//---------------------------------------------------------------------------
+SYStem.MODE Down
+
+//Break.Delete /ALL
+
+sys.option.EnReset off
+sys.cpu CortexR5F
+sys.CONFIG.AHBACCESSPORT 0
+sys.CONFIG.DEBUGACCESSPORT 1
+
+sys.config corebase	0x80410000
+sys.mode prepare
+
+sys.m.a
+
+if run()
+	Break
+
+cd &outputPath
+d.load.elf sources\build\tcc805x\gcc\linux-freertos-release\boot /RELPATH /PATH ./ /nocode
+
+if (("&netSrcPath"!="")&&("&realSrcPath"!=""))
+(
+	sYmbol.SourcePATH.Translate "&realSrcPath" "&netSrcPath"
+)
+
+d.l
+
+enddo

@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>assets/mdibg.png</file>
+        <file>assets/cangaroo.png</file>
+        <file>assets/cangaroo.svg</file>
+        <file>assets/connect.png</file>
+        <file>assets/disconnect.png</file>
+    </qresource>
+</RCC>

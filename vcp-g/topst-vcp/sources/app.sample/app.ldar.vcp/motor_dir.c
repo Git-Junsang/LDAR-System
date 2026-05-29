@@ -16,12 +16,13 @@ void MotorDir_Set(MotorDir_t dir)
 {
     switch (dir) {
         case MOTOR_DIR_FORWARD:
-            GPIO_Set(LDAR_PIN_MOTOR_IN1, 1);
-            GPIO_Set(LDAR_PIN_MOTOR_IN2, 0);
-            break;
-        case MOTOR_DIR_REVERSE:
+            /* L298N→모터 결선 기준 swap (보드 실측 결과 IN1/IN2 반대) */
             GPIO_Set(LDAR_PIN_MOTOR_IN1, 0);
             GPIO_Set(LDAR_PIN_MOTOR_IN2, 1);
+            break;
+        case MOTOR_DIR_REVERSE:
+            GPIO_Set(LDAR_PIN_MOTOR_IN1, 1);
+            GPIO_Set(LDAR_PIN_MOTOR_IN2, 0);
             break;
         case MOTOR_DIR_BRAKE:
             GPIO_Set(LDAR_PIN_MOTOR_IN1, 1);
