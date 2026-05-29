@@ -12,11 +12,11 @@
 
 ## 시스템 구성 (3-Zonal)
 
-| Zone | Board | 역할 | 하드웨어 | 담당 |
-|---|---|---|---|---|
-| Sensing | **AI-G** | Perception — 카메라 영상 → NPU 추론 → 차선 좌표 추출 | A53 Quad + NPU 8TOPS, 2GB LPDDR4X, MIPI CSI-2 | 정은진 |
-| HPC | **D3-G** (TCC8050) | Decision — 차선 데이터 기반 이탈 판정·복귀각 계산 | A72(Linux, 판정) + R5(FreeRTOS, IPC↔CAN) | 서준상 |
-| Control | **VCP-G** | Actuation — 조이스틱 수동주행 + CAN 수신 → 모터·서보·LED·버저 | MCU + FreeRTOS, ADC/GPIO/PDM/I2C | 서준상 |
+| Zone    | Board              | 역할　　　　　　　　　　　　　　　　　　　　　　　　　　　　　| 하드웨어　　　　　　　　　　　　　　　　　　　| 담당　 |
+| ---------| --------------------| ---------------------------------------------------------------| -----------------------------------------------| --------|
+| Sensing | **AI-G**           | Perception — 카메라 영상 → NPU 추론 → 차선 좌표 추출　　　　　| A53 Quad + NPU 8TOPS, 2GB LPDDR4X, MIPI CSI-2 | 정은진 |
+| HPC     | **D3-G** (TCC8050) | Decision — 차선 데이터 기반 이탈 판정·복귀각 계산　　　　　　 | A72(Linux, 판정) + R5(FreeRTOS, IPC↔CAN)　　　| 서준상 |
+| Control | **VCP-G**          | Actuation — 조이스틱 수동주행 + CAN 수신 → 모터·서보·LED·버저 | MCU + FreeRTOS, ADC/GPIO/PDM/I2C　　　　　　　| 서준상 |
 
 ### 데이터 흐름
 
@@ -108,36 +108,153 @@ LDAR-System/
 
 작업물에 따라 빌드 위치가 다르다:
 
-| 작업물 | 위치 | 빌드 방식 |
+| 작업물 | 작성·빌드 | 플래시·콘솔 |
 |---|---|---|
-| **A72 판정 앱** | D3-G 보드 (VS Code Remote-SSH) | native gcc — 보드에 gcc/g++/make 존재 (Yocto 재빌드 불필요) |
-| **R5 펌웨어** | Windows WSL2 | 텔레칩스 R5 빌드환경 (교육과정 D02-T01) |
-| **VCP-G 펌웨어** | Windows WSL2 | `topst-vcp` BSP — easy-setup + make + FWDN |
+| **A72 판정 앱** | D3-G 보드 (VS Code Remote-SSH, native gcc) | 동일 (보드에서 직접 실행) |
+| **R5 펌웨어** | Windows WSL2 (텔레칩스 R5 빌드환경, D02-T01) | Windows WSL2 (보드 USB 직결) |
+| **VCP-G 펌웨어** | **외부 Linux 서버(code-server)** — `topst-vcp` BSP, `vcp-g/topst-vcp/`에서 직접 작업 | **사용자 로컬 Windows + WSL2** (`usbipd` USB 전달 + `fwdn` + `minicom`) |
 
+- **VCP-G는 빌드 머신과 플래시 머신이 분리됨** — code-server는 보드 USB가 없으므로 `.rom` 산출물을 git으로 로컬에 전달한 뒤 로컬 WSL2에서 플래시한다.
 - **git**: GitHub origin(`Git-Junsang/LDAR-System`)을 각 환경에 clone. 네트워크 드라이브 공유 워킹트리 금지
 - **D3-G 보드**: IP `192.168.0.35`(DHCP, 공유기 IP 고정 권장), `/dev/tcc_ipc_micom` 존재(A72↔R5 IPC). `/` 파티션은 `sudo resize2fs /dev/mmcblk0p4`로 16G→28G 확장
-- **LDAR VCP-G 코드는 `vcp-g/`에 두고** 빌드 시 `~/topst-vcp` 앱 소스에 오버레이. BSP(~76MB)는 본 repo에 커밋하지 않음
+- **LDAR VCP-G 코드**는 BSP 트리 안에 직접 둔다 — `vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/`. BSP(~76MB) 자체는 git에 커밋하지 않음 (`vcp-g/.gitkeep`만 추적). LDAR 파일과 `.rom` 산출물은 `git add -f`로 명시 추가
 
-### VCP-G 펌웨어 빌드·플래시 (WSL2)
+### VCP-G — 사전 준비 (최초 1회)
+
+#### 서버(code-server) 쪽 — 빌드 환경
 
 ```bash
-# 1) BSP 클론 (최초 1회) — branch: develop
-git clone https://github.com/topst-development/FreeRTOS-VCP ~/topst-vcp
+# 1) BSP clone (이미 있으면 skip)
+cd <repo>/vcp-g
+git clone https://github.com/topst-development/FreeRTOS-VCP topst-vcp
 
-# 2) 셋업 + 빌드
-cd ~/topst-vcp && ./easy-setup_vcp-g.sh         # 라이선스 [Tab] → [Enter]
-cd build/tcc70xx/gcc && make                     # → output/tcc70xx_pflash_boot_2M_ECC.rom
+# 2) Linaro 7.2.1 툴체인 — Makefile이 /opt 경로를 기본값으로 가짐
+cd /tmp
+wget https://releases.linaro.org/components/toolchain/binaries/7.2-2017.11/arm-eabi/gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi.tar.xz
+sudo tar xf gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi.tar.xz -C /opt/
+# 다른 위치 사용 시: MCU_BSP_TOOLCHAIN_PATH=/your/path make
 
-# 3) FWDN 플래시 (FWDN 스위치 누른 채 12V/1A 전원 연결 → FWDN 모드)
-sudo ~/topst-vcp/tools/fwdn_vcp/fwdn \
-  --fwdn ~/topst-vcp/tools/fwdn_vcp/vcp_fwdn.rom \
-  -w ~/topst-vcp/build/tcc70xx/gcc/output/tcc70xx_pflash_boot_2M_ECC.rom
+# 3) easy-setup용 whiptail (또는 -e 플래그로 우회)
+sudo apt install whiptail
 
-# 4) 콘솔 확인 (FWDN 후 전원 재연결)
-minicom -D /dev/ttyUSB0 -b 115200 -8
+# 4) easy-setup (라이선스 동의 + 빌드 환경 초기화)
+cd <repo>/vcp-g/topst-vcp && ./easy-setup_vcp-g.sh -e
 ```
 
-> Windows에서 보드를 WSL2로 넘기려면 `usbipd`(관리자 PowerShell: `usbipd bind/attach --wsl --busid <id>`) + CP210x 드라이버 필요.
+> 서버에는 `fwdn`/`minicom` 불필요 — 플래시·콘솔은 사용자 로컬에서.
+
+#### 사용자 로컬(Windows + WSL2) 쪽 — 플래시 환경
+
+```bash
+# WSL2 안에서
+# 1) repo clone + BSP clone (fwdn 바이너리 사용 목적)
+git clone https://github.com/Git-Junsang/LDAR-System ~/LDAR-System
+cd ~/LDAR-System/vcp-g
+git clone https://github.com/topst-development/FreeRTOS-VCP topst-vcp
+
+# 2) 보조 도구
+sudo apt install minicom
+sudo usermod -aG dialout $USER   # /dev/ttyUSB0 권한 (재로그인 필요)
+```
+
+Windows 쪽:
+- **CP210x USB-Serial 드라이버** 설치 (Silicon Labs)
+- **usbipd-win** 설치 (`winget install usbipd`) — Windows USB 장치를 WSL2로 전달
+- 보드 USB 연결 후 관리자 PowerShell:
+  ```
+  usbipd list                          # busid 확인
+  usbipd bind --busid <id>             # 최초 1회
+  usbipd attach --wsl --busid <id>     # WSL2에 attach (재연결 때마다)
+  ```
+
+### VCP-G — 코드 추가 방법 (서버에서)
+
+LDAR 모듈은 `vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/` 안에서 작업한다 (BSP 트리 직접 편집, overlay 단계 없음).
+
+새 주변장치/기능을 추가할 때:
+
+1. **모듈 파일 쌍 생성** — PDF D02-T04~T06 패턴(`xxx.h` + `xxx.c`):
+   ```
+   vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/
+   ├── ldar_pins.h        # 모든 GPIO/ADC/PDM 핀 매크로 한 곳에 집중
+   ├── ldar_app.h / .c    # 진입점 LDAR_Run() — 폴링 루프
+   ├── joystick_sw.h/c    # 모듈 예: 조이스틱 SW 버튼
+   ├── motor_dir.h/c      # 모듈 예: L298N 모터 방향핀
+   ├── turn_signal.h/c    # 모듈 예: 방향지시 택트 버튼
+   └── rules.mk           # SRCS 등록 + 빌드 플래그
+   ```
+
+2. **`app.ldar.vcp/rules.mk`에 소스 등록**:
+   ```makefile
+   SRCS += new_module.c
+   ```
+
+3. **`ldar_app.c`의 `LDAR_Run()`에 init/step 호출 추가**:
+   ```c
+   NewModule_Init();
+   while (1) {
+       NewModule_Step();
+       (void)SAL_TaskSleep(20);
+   }
+   ```
+
+4. **새 핀이 필요하면 `ldar_pins.h`에 `#define LDAR_PIN_XXX GPIO_GPB(n)` 추가** — 모든 핀 매핑을 한 파일에 모은다 (배선 변경 시 이 파일만 수정).
+
+5. **새 BSP 드라이버 카테고리(ADC/PDM/CAN 등)가 필요하면** `vcp-g/topst-vcp/sources/app.sample/rules.mk`의 해당 `MCU_BSP_BUILD_FLAGS_TEST_APP_XXX` 빌드 플래그를 ON(`?= 1`)으로 켜거나, `build/tcc70xx/gcc/Makefile` 상단에서 ON.
+
+6. **별도 main.c 수정은 보통 불필요** — `app.sample/app.base/main.c`의 `Main_StartTask`가 이미 `MCU_BSP_SUPPORT_APP_LDAR_VCP` 가드로 `LDAR_Run()`을 호출하도록 패치돼 있음. `app.ldar.vcp/rules.mk`가 이 매크로를 `-D`로 정의함.
+
+### VCP-G — 빌드 (서버에서)
+
+```bash
+cd vcp-g/topst-vcp/build/tcc70xx/gcc
+make                       # → output/tcc70xx_pflash_boot_2M_ECC.rom
+# 깨끗하게 다시: make clean && make
+```
+
+### VCP-G — 산출물 git 전달 (서버 → 로컬)
+
+서버:
+```bash
+cd <repo>
+# BSP 트리는 untracked이므로 LDAR 파일과 산출물을 명시 add (.gitignore의 build/, *.bin 회피)
+git add -f vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/
+git add -f vcp-g/topst-vcp/sources/app.sample/rules.mk
+git add -f vcp-g/topst-vcp/sources/app.sample/app.base/main.c
+git add -f vcp-g/topst-vcp/build/tcc70xx/gcc/output/tcc70xx_pflash_boot_2M_ECC.rom
+git commit -m "vcp-g: <변경 요약>"
+git push
+```
+
+로컬 WSL2:
+```bash
+cd ~/LDAR-System && git pull
+```
+
+### VCP-G — 플래시 (로컬 WSL2에서)
+
+1. **보드를 FWDN 모드로 진입**
+   - 보드 위 **FWDN 스위치를 누른 채** 12V/1A 어댑터 전원 연결
+   - USB-C 케이블 연결 → Windows에서 `usbipd attach --wsl --busid <id>`
+
+2. **fwdn 실행** (WSL2에서, sudo 필요):
+   ```bash
+   cd ~/LDAR-System/vcp-g/topst-vcp
+   sudo tools/fwdn_vcp/fwdn \
+       --fwdn tools/fwdn_vcp/vcp_fwdn.rom \
+       -w    build/tcc70xx/gcc/output/tcc70xx_pflash_boot_2M_ECC.rom
+   ```
+
+3. **플래시 완료 후**: 전원 분리 → FWDN 스위치 떼고 → 다시 전원 연결 (Run 모드 부팅).
+
+### VCP-G — 콘솔 확인 (로컬 WSL2에서)
+
+```bash
+minicom -D /dev/ttyUSB0 -b 115200 -8
+# 종료: Ctrl+A → Q
+```
+
+`/dev/ttyUSB0`이 안 보이면 Windows에서 usbipd attach 여부와 `dmesg | tail`로 장치 enumerate 확인.
 
 ### CAN 디버깅
 
@@ -165,7 +282,7 @@ A72에 SocketCAN(`can0`)이 **없음** → D3-G에서 `candump` 불가. CAN은 R
 
 ### 인지 (AI-G) — 담당: 정은진
 
-- [ ] MobileNet-V2 + U-Net / UFLD 모델 변환 (ONNX → tc-nn-toolkit)
+- [x] MobileNet-V2 + U-Net / UFLD 모델 변환 (ONNX → tc-nn-toolkit)
 - [ ] 양자화 + NPU 컴파일 (tc-nn-toolkit)
 - [ ] AI-G 보드 모델 배포, tc-nn-app 런타임 실행
 - [ ] 카메라 입력 → 추론 → 후처리 (좌표 + 실선/점선 라벨 출력)

@@ -51,3 +51,14 @@ desktop.ini
 *.log
 *.tmp
 *.cache
+
+# --- Telechips VCP-G BSP (local clone, do not commit wholesale ~76MB) ---
+# Whitelist only LDAR overlay paths. Build output (.rom) commits via `git add -f`.
+vcp-g/topst-vcp/**
+!vcp-g/topst-vcp/sources/
+!vcp-g/topst-vcp/sources/app.sample/
+!vcp-g/topst-vcp/sources/app.sample/rules.mk
+!vcp-g/topst-vcp/sources/app.sample/app.base/
+!vcp-g/topst-vcp/sources/app.sample/app.base/main.c
+!vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/
+!vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/**
