@@ -7,7 +7,7 @@
 #include <pdm.h>
 
 #define MOTOR_PERIOD_NS   (1000000U)   /* 1 ms = 1 kHz */
-#define MOTOR_DUTY_CAP    (80U)        /* CLAUDE.md spec: cap at 80% */
+#define MOTOR_DUTY_CAP    (100U)       /* 하드 상한 — 조이스틱 풀스로틀 100% 허용 */
 
 static uint8_t s_lastDuty = 0xFFU;     /* sentinel — force first apply */
 

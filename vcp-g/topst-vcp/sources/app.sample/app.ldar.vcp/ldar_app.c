@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 #define VRY_GO_THRESHOLD   (10)   /* below this magnitude → coast (STOP) */
-#define MOTOR_DUTY_CAP_PCT (80U)  /* CLAUDE.md spec */
+#define MOTOR_DUTY_CAP_PCT (100U) /* 로컬 조이스틱 풀스로틀 = 100% (80%는 토크 부족) */
 
 static const char *DirName(MotorDir_t d)
 {

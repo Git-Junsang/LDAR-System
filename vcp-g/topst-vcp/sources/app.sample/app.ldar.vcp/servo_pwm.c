@@ -15,24 +15,25 @@
 #define SERVO_PULSE_MAX_NS     (SERVO_PULSE_CENTER_NS + SERVO_PULSE_SWING_NS)
 #define SERVO_ANGLE_MAX        (127U)
 
-/* 서보 기계적 중립 보정. 펄스 1.5ms일 때 우측으로 ~5° 틀어지는 경우 +50000ns(+50us)
- * 만큼 펄스를 늘려 반시계 보정. 부호·크기는 실측 후 조정.
- *  - 우측으로 틀어졌으면: 양수 증가 (+50000 → +100000 ...)
- *  - 좌측으로 틀어졌으면: 음수 (-50000 → -100000 ...)
- * 약 10us ≈ 1° (서보별 다름) */
-#define SERVO_TRIM_NS      (50000)
+/* 서보 미세 중립 트림. horn을 기계적으로 정렬(축 재장착)하므로 기본 0.
+ * 스플라인 간격상 정확히 정면이 안 나오면 ±10000ns(≈1°)씩만 미세 조정.
+ *  - 정면에서 우측으로 틀어졌으면 한쪽 부호, 좌측이면 반대 (실측 후 ±) */
+#define SERVO_ANGLE_CENTER (SERVO_ANGLE_MAX / 2U)   /* 63 → 정확히 CENTER 펄스 */
+#define SERVO_TRIM_NS      (0)
 
 static uint8_t s_lastAngle = 0xFFU;     /* sentinel */
 
 static uint32_t ComputeDutyNs(uint8_t angle)
 {
-    int32_t base = (int32_t)SERVO_PULSE_MIN_NS +
-        (((int32_t)angle * (int32_t)(SERVO_PULSE_MAX_NS - SERVO_PULSE_MIN_NS))
-         / (int32_t)SERVO_ANGLE_MAX);
-    int32_t trimmed = base + (int32_t)SERVO_TRIM_NS;
-    if (trimmed < 0) { trimmed = 0; }
-    if (trimmed > (int32_t)SERVO_PERIOD_NS) { trimmed = (int32_t)SERVO_PERIOD_NS; }
-    return (uint32_t)trimmed;
+    if (angle > SERVO_ANGLE_MAX) { angle = SERVO_ANGLE_MAX; }
+    /* angle=CENTER(63) → 정확히 1.5ms. 좌우 대칭: ±63스텝 = ∓SWING. */
+    int32_t delta = (int32_t)angle - (int32_t)SERVO_ANGLE_CENTER;   /* -63..+64 */
+    int32_t duty  = (int32_t)SERVO_PULSE_CENTER_NS
+                  + ((delta * (int32_t)SERVO_PULSE_SWING_NS) / (int32_t)SERVO_ANGLE_CENTER)
+                  + (int32_t)SERVO_TRIM_NS;
+    if (duty < (int32_t)SERVO_PULSE_MIN_NS) { duty = (int32_t)SERVO_PULSE_MIN_NS; }
+    if (duty > (int32_t)SERVO_PULSE_MAX_NS) { duty = (int32_t)SERVO_PULSE_MAX_NS; }
+    return (uint32_t)duty;
 }
 
 void ServoPwm_Init(void)
@@ -41,8 +42,8 @@ void ServoPwm_Init(void)
      * boot order. Calling again is harmless. */
     PwmUtil_Apply(LDAR_PWM_CH_SERVO, LDAR_PWM_PORT_SERVO,
                   SERVO_PERIOD_NS,
-                  ComputeDutyNs(SERVO_ANGLE_MAX / 2U));
-    s_lastAngle = SERVO_ANGLE_MAX / 2U;
+                  ComputeDutyNs(SERVO_ANGLE_CENTER));
+    s_lastAngle = SERVO_ANGLE_CENTER;
 }
 
 void ServoPwm_SetAngle(uint8_t angle)
