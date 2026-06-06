@@ -9,13 +9,15 @@
 #include "turn_signal.h"
 #include "turn_can.h"
 #include "turn_led.h"
+#include "override.h"
+#include "buzzer.h"
 
 #include <sal_api.h>
 #include <debug.h>
 #include <stdint.h>
 
 #define VRY_GO_THRESHOLD   (10)   /* below this magnitude → coast (STOP) */
-#define MOTOR_DUTY_CAP_PCT (100U) /* 로컬 조이스틱 풀스로틀 = 100% (80%는 토크 부족) */
+#define MOTOR_DUTY_CAP_PCT (90U)  /* 조이스틱 풀스로틀 90% — 최고속 ~10%↓ (오픈루프라 토크도 약간 같이 감소) */
 
 static const char *DirName(MotorDir_t d)
 {
@@ -83,6 +85,8 @@ void LDAR_Run(void)
     TurnSignal_Init();
     TurnCan_Init();
     TurnLed_Init();
+    Override_Init();
+    Buzzer_Init();
 
     mcu_printf("\n[LDAR] Phase 1 full loop started (GPIO+ADC+PWM+CAN)\n");
 
@@ -92,7 +96,8 @@ void LDAR_Run(void)
     while (1) {
         uint32_t       sw    = JoystickSW_Read();
         JoystickAxes_t axes  = JoystickAdc_Read();
-        TurnSignal_t   ts    = TurnSignal_Read();
+        TurnSignal_t   ts    = TurnSignal_Update();
+        OverrideDir_t  ovr   = Override_Get();
 
         MotorDir_t     dir   = DecideDir(sw, axes.vry);
         uint8_t        duty  = DutyFromVry(dir, axes.vry);
@@ -102,7 +107,8 @@ void LDAR_Run(void)
         MotorPwm_SetDutyPercent(duty);
         ServoPwm_SetAngle(angle);
         TurnCan_SendIfChanged(ts);
-        TurnLed_Update(ts, tick);
+        TurnLed_Update(ts, ovr, tick);
+        Buzzer_Set(((sw != 0U) || (ovr != OVR_NONE)) ? 1U : 0U);
 
         if ((dir != prev) || ((tick % 50U) == 0U)) {
             mcu_printf("\n[LDAR] sw=%d vrx=%d vry=%d (raw %d/%d) duty=%d%% angle=%d turn=%s dir=%s",

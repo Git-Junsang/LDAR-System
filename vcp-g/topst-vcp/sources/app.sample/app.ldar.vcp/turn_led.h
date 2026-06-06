@@ -5,9 +5,12 @@
 
 #include <stdint.h>
 #include "turn_signal.h"
+#include "override.h"
 
-/* 방향지시 LED 2개. ts == LEFT/RIGHT 인 동안 해당 LED를 1Hz로 깜박임. */
+/* 상태 LED 4개:
+ *  - 녹색 L/R : 방향지시(turn) 활성 쪽을 1Hz 깜박임
+ *  - 적색 L/R : 오버라이드 보상 방향을 점등(고정) */
 void TurnLed_Init(void);
-void TurnLed_Update(TurnSignal_t ts, uint32_t tick);
+void TurnLed_Update(TurnSignal_t turn, OverrideDir_t ovr, uint32_t tick);
 
 #endif

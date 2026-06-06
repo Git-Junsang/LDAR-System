@@ -18,4 +18,6 @@ SRCS += servo_pwm.c
 SRCS += turn_signal.c
 SRCS += turn_can.c
 SRCS += turn_led.c
+SRCS += override.c
+SRCS += buzzer.c
 SRCS += pwm_util.c
