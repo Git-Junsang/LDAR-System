@@ -1,0 +1,16 @@
+# LDAR traffic-sign detection dataset (YOLOv8 detect)
+# Class IDs are FIXED by the label .txt files — do not reorder:
+#   0 Stop, 1 No Entry, 2 Speed_Limit_60, 3 Speed_Limit_30
+# Absolute `path` so training works from any CWD (the Roboflow default
+# `../train/images` is relative to the yaml's parent and resolves wrong).
+path: "/data/2026 CAU/0. 1학기/고급프로젝트/Project/git/LDAR-System/ai-g/ai_model/dataset"
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 4
+names:
+  0: Stop
+  1: No Entry
+  2: Speed_Limit_60
+  3: Speed_Limit_30

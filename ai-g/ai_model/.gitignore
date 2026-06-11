@@ -1,0 +1,17 @@
+# Training/runtime artifacts — keep the repo to code + small deployable models
+.venv/
+runs/
+*.pt              # downloaded pretrained / trained checkpoints (push only the deployable .onnx/.bin)
+yolov8*.pt
+__pycache__/
+*.cache
+dataset/*/labels.cache
+dataset/.data.resolved.yaml
+
+# 데이터셋 이미지·라벨 (용량) — data.yaml 만 추적
+dataset/train/
+dataset/valid/
+dataset/test/
+# 스톡(80-class) 참고 모델 — 배포본 아님(README 참조), 용량 커서 제외
+yolov8s_extracted.onnx
+yolov8s.bin
