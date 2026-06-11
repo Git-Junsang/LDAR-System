@@ -55,12 +55,21 @@ static void OverrideCan_Apply(const CANMessage_t *msg)
 void OverrideCan_Poll(void)
 {
     CANMessage_t rx;
+    uint8_t      ch;
 
-    /* 링버퍼에 쌓인 수신 메시지를 모두 드레인 (없으면 즉시 반환). */
-    while (CAN_CheckNewRxMessage(LDAR_CAN_CH) > 0U) {
-        if (CAN_GetNewRxMessage(LDAR_CAN_CH, &rx) != CAN_ERROR_NONE) {
-            break;
+    /* DEBUG: CAN 채널 0~2 전부 폴링하고, 받은 프레임을 모두 콘솔에 출력.
+     * → 어느 채널로 무슨 ID가 들어오는지(또는 아예 안 들어오는지) 한눈에 확인.
+     * 진단 끝나면 이 루프를 LDAR_CAN_CH 단일 폴링으로 되돌릴 것. */
+    for (ch = 0U; ch < 3U; ch++) {
+        while (CAN_CheckNewRxMessage(ch) > 0U) {
+            if (CAN_GetNewRxMessage(ch, &rx) != CAN_ERROR_NONE) {
+                break;
+            }
+            mcu_printf("\n[CANRX] ch=%d id=0x%X len=%d d0=0x%02X d1=0x%02X",
+                       (int)ch, (int)rx.mId, (int)rx.mDataLength,
+                       (int)rx.mData[0],
+                       (int)((rx.mDataLength > 1U) ? rx.mData[1] : 0U));
+            OverrideCan_Apply(&rx);   /* 0x110이면 오버라이드 적용 */
         }
-        OverrideCan_Apply(&rx);
     }
 }
