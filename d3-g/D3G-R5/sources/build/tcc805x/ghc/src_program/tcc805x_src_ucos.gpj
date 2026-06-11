@@ -1,0 +1,216 @@
+#!gbuild
+[Program]
+	-I.\..\..\..\..\app.sample\app.base
+	-I.\..\..\..\..\app.sample\app.base\tcc805x
+	-I.\..\..\..\..\app.sample\app.console
+	-I.\..\..\..\..\app.sample\app.key
+	-I.\..\..\..\..\app.sample\app.system.monitoring
+	-I.\..\..\..\..\app.sample\fwug
+	-I.\..\..\..\..\app.sample\test.app.adc
+	-I.\..\..\..\..\app.sample\test.app.can
+	-I.\..\..\..\..\app.sample\test.app.dse
+	-I.\..\..\..\..\app.sample\test.app.fmu
+	-I.\..\..\..\..\app.sample\test.app.gdma
+	-I.\..\..\..\..\app.sample\test.app.gic
+	-I.\..\..\..\..\app.sample\test.app.gpio
+	-I.\..\..\..\..\app.sample\test.app.gpsb
+	-I.\..\..\..\..\app.sample\test.app.hsm
+	-I.\..\..\..\..\app.sample\test.app.i2c
+	-I.\..\..\..\..\app.sample\test.app.ictc
+	-I.\..\..\..\..\app.sample\test.app.lin
+	-I.\..\..\..\..\app.sample\test.app.pdm
+	-I.\..\..\..\..\app.sample\test.app.pmio
+	-I.\..\..\..\..\app.sample\test.app.timer
+	-I.\..\..\..\..\app.sample\test.app.wdt
+	-I.\..\..\..\..\app.sample\app.trust.rvc
+	-I.\..\..\..\..\app.drivers\ipc
+	-I.\..\..\..\..\app.drivers\lin
+	-I.\..\..\..\..\app.drivers\lin\tcc805x
+	-I.\..\..\..\..\app.drivers\sdm
+	-I.\..\..\..\..\app.drivers\hsm
+	-I.\..\..\..\..\app.drivers\hsm\tcc805x
+	-I.\..\..\..\..\core
+	-I.\..\..\..\..\dev.drivers\adc
+	-I.\..\..\..\..\dev.drivers\adc\tcc805x
+	-I.\..\..\..\..\dev.drivers\can
+	-I.\..\..\..\..\dev.drivers\can\tcc805x
+	-I.\..\..\..\..\dev.drivers\clock
+	-I.\..\..\..\..\dev.drivers\clock\tcc805x
+	-I.\..\..\..\..\dev.drivers\common
+	-I.\..\..\..\..\dev.drivers\common\tcc805x
+	-I.\..\..\..\..\dev.drivers\eeprom
+	-I.\..\..\..\..\dev.drivers\eeprom\tcc805x
+	-I.\..\..\..\..\dev.drivers\fmu
+	-I.\..\..\..\..\dev.drivers\fmu\tcc805x
+	-I.\..\..\..\..\dev.drivers\gdma
+	-I.\..\..\..\..\dev.drivers\gdma\tcc805x
+	-I.\..\..\..\..\dev.drivers\gic
+	-I.\..\..\..\..\dev.drivers\gic\tcc805x
+	-I.\..\..\..\..\dev.drivers\gpio
+	-I.\..\..\..\..\dev.drivers\gpio\tcc805x
+	-I.\..\..\..\..\dev.drivers\i2c
+	-I.\..\..\..\..\dev.drivers\i2c\tcc805x
+	-I.\..\..\..\..\dev.drivers\ictc
+	-I.\..\..\..\..\dev.drivers\ictc\tcc805x
+	-I.\..\..\..\..\dev.drivers\mailbox
+	-I.\..\..\..\..\dev.drivers\mailbox\tcc805x
+	-I.\..\..\..\..\dev.drivers\mpu
+	-I.\..\..\..\..\dev.drivers\mpu\tcc805x
+	-I.\..\..\..\..\dev.drivers\pdm
+	-I.\..\..\..\..\dev.drivers\pdm\tcc805x
+	-I.\..\..\..\..\dev.drivers\pmio
+	-I.\..\..\..\..\dev.drivers\pmio\tcc805x
+	-I.\..\..\..\..\dev.drivers\robust
+	-I.\..\..\..\..\dev.drivers\gpsb
+	-I.\..\..\..\..\dev.drivers\gpsb\tcc805x
+	-I.\..\..\..\..\dev.drivers\timer
+	-I.\..\..\..\..\dev.drivers\timer\tcc805x
+	-I.\..\..\..\..\dev.drivers\uart
+	-I.\..\..\..\..\dev.drivers\uart\tcc805x
+	-I.\..\..\..\..\dev.drivers\udma
+	-I.\..\..\..\..\dev.drivers\udma\tcc805x
+	-I.\..\..\..\..\dev.drivers\watchdog
+	-I.\..\..\..\..\dev.drivers\watchdog\tcc805x
+	-I.\..\..\..\..\dev.drivers\dse
+	-I.\..\..\..\..\dev.drivers\dse\tcc805x
+	-I.\..\..\..\..\dev.drivers\midf
+	-I.\..\..\..\..\dev.drivers\midf\tcc805x
+	-I.\..\..\..\..\sal
+	-I.\..\..\..\..\sal\sal_ucos
+	-I.\..\..\..\..\os\ucos\uC-CPU
+	-I.\..\..\..\..\os\ucos\uC-CPU\ARM-Cortex-A\GHC
+	-I.\..\..\..\..\os\ucos\uC-LIB
+	-I.\..\..\..\..\os\ucos\uCOS-III
+	-I.\..\..\..\..\os\ucos\uCOS-III\Ports\ARM-Cortex-A\Generic\GHC
+	-I.\..\..\..\..\os\ucos\uCOS-III\Source
+	-I.\..\..\..\..\os\ucos\uCOS
+	-I.\..\..\..\..\os\ucos
+	{optgroup=GhsCommonOptions} -o ghc-ucos\boot
+	-preprocess_assembly_files
+	-D__func__=__FUNCTION__
+	-DDMA_NC_SIZE=0x4000
+	-object_dir=ghc-ucos\obj
+	-cpu=cortexr5f
+	-DSNOR_STANDALONE
+	-DTCC805x
+	-DOS_UCOS
+	:postexecShellSafe='mkrom_cs.bat ucos'
+	-O0
+	-DMCU_BSP_BOARD_VER_TCC8059_EVM_0_1
+	-DFMU_DRIVER
+	-DDEBUG_ENABLE=1
+	-DCONSOLE_HISTORY_ENABLE
+	-D__MPU_ENABLED__
+
+	-I.\..\..\..\..\dev.drivers\mailbox\common
+	-I.\..\..\..\..\app.drivers\ipc\common
+	-I.\..\..\..\..\app.sample\app.can.demo
+	-I.\..\..\..\..\app.sample\app.fwug
+	-I.\..\..\..\..\dev.drivers\pmu
+	-I.\..\..\..\..\dev.drivers\pmu\tcc805x
+	-I.\..\..\..\..\app.sample\app.reset.demo
+	-I.\..\..\..\..\app.sample\app.boot.ctrl
+build\tcc805x\ghc\tgt\standalone_romcopy_tcc805x_snor.ld
+sal\sal.asm
+core\GHC\arm_a.asm
+core\GHC\startup.asm
+core\GHC\vector.asm
+app.sample\app.reset.demo\reset_demo.c
+core\GHC\vfp_init.asm
+app.drivers\sdm\sdm.c
+app.drivers\lin\lin.c
+app.drivers\ipc\common\ipc_api.c
+app.drivers\ipc\common\ipc_buffer.c
+app.drivers\ipc\common\ipc_cmd.c
+app.drivers\ipc\common\ipc_ctl.c
+app.sample\app.boot.ctrl\bootctrl.c
+app.drivers\ipc\common\ipc_os.c
+app.drivers\ipc\common\ipc_parser.c
+app.drivers\ipc\ipc.c
+sal\sal_api.c
+app.drivers\hsm\tcc805x\hsm_manager.c
+sal\sal_ucos\sal_ucos_impl.c
+os\ucos\bsp_os.c
+os\ucos\uC-CPU\ARM-Cortex-A\GHC\cpu_a.asm
+os\ucos\uC-CPU\cpu_core.c
+os\ucos\uC-LIB\Ports\ARM\GHC\lib_mem_a.asm
+os\ucos\uC-LIB\lib_ascii.c
+os\ucos\uC-LIB\lib_math.c
+os\ucos\uC-LIB\lib_mem.c
+os\ucos\uC-LIB\lib_str.c
+os\ucos\uCOS-III\Ports\ARM-Cortex-A\Generic\GHC\os_cpu_a_vfp-none.asm
+os\ucos\uCOS\cpu_bsp.c
+os\ucos\uCOS-III\Ports\ARM-Cortex-A\Generic\GHC\os_cpu_c.c
+os\ucos\uCOS-III\Source\os_cfg_app.c
+os\ucos\uCOS-III\Source\os_core.c
+os\ucos\uCOS-III\Source\os_dbg.c
+os\ucos\uCOS-III\Source\os_flag.c
+os\ucos\uCOS-III\Source\os_int.c
+os\ucos\uCOS-III\Source\os_mem.c
+os\ucos\uCOS-III\Source\os_msg.c
+os\ucos\uCOS-III\Source\os_mutex.c
+os\ucos\uCOS-III\Source\os_pend_multi.c
+os\ucos\uCOS-III\Source\os_prio.c
+os\ucos\uCOS-III\Source\os_q.c
+os\ucos\uCOS-III\Source\os_sem.c
+os\ucos\uCOS-III\Source\os_stat.c
+os\ucos\uCOS-III\Source\os_task.c
+os\ucos\uCOS-III\Source\os_tick.c
+os\ucos\uCOS-III\Source\os_time.c
+os\ucos\uCOS-III\Source\os_tmr.c
+os\ucos\uCOS-III\Source\os_var.c
+dev.drivers\watchdog\wdt.c
+dev.drivers\timer\timer.c
+dev.drivers\uart\tcc805x\uart.c
+dev.drivers\udma\tcc805x\udma.c
+dev.drivers\pdm\pdm.c
+dev.drivers\pmio\tcc805x\pmio_dev.c
+dev.drivers\mailbox\tcc805x\mbox_phy.c
+dev.drivers\mailbox\mbox.c
+dev.drivers\mailbox\common\mbox_dev.c
+dev.drivers\midf\tcc805x\midf.c
+dev.drivers\mpu\tcc805x\mpu.c
+dev.drivers\i2c\i2c.c
+dev.drivers\i2c\tcc805x\i2c_reg.c
+dev.drivers\ictc\ictc.c
+dev.drivers\gpio\tcc805x\gpio.c
+dev.drivers\gpsb\gpsb.c
+dev.drivers\gpsb\tcc805x\gpsb_reg.c
+dev.drivers\fmu\tcc805x\fmu.c
+dev.drivers\gdma\tcc805x\gdma.c
+dev.drivers\gic\tcc805x\gic.c
+dev.drivers\common\tcc805x\bsp.c
+dev.drivers\dse\tcc805x\dse.c
+dev.drivers\clock\tcc805x\clock_dev.c
+dev.drivers\common\debug.c
+dev.drivers\can\can_drv.c
+dev.drivers\can\can_msg.c
+dev.drivers\can\can_par.c
+dev.drivers\can\tcc805x\can_porting.c
+dev.drivers\adc\tcc805x\adc.c
+dev.drivers\can\can.c
+dev.drivers\pmu\pmu_reset.c
+app.sample\test.app.lin\lin_test.c
+app.sample\test.app.pdm\pdm_test.c
+app.sample\test.app.pmio\pmio_test.c
+app.sample\test.app.timer\timer_test.c
+app.sample\test.app.wdt\wdt_test.c
+app.sample\test.app.gpio\gpio_test.c
+app.sample\test.app.gpsb\gpsb_test.c
+app.sample\test.app.i2c\i2c_test.c
+app.sample\test.app.ictc\ictc_test.c
+app.sample\test.app.gdma\gdma_test.c
+app.sample\test.app.gic\gic_test.c
+app.sample\test.app.dse\dse_test.c
+app.sample\test.app.fmu\fmu_test.c
+app.sample\test.app.adc\adc_test.c
+app.sample\test.app.hsm\hsm_test.c
+app.sample\app.key\key_adc.c
+app.sample\app.fwug\fwug.c
+app.sample\app.can.demo\can_demo.c
+app.sample\app.key\key_gpio.c
+app.sample\app.key\key_i2c.c
+app.sample\app.system.monitoring\system_monitoring.c
+app.sample\app.console\console.c
+app.sample\app.key\key.c
+app.sample\app.base\main.c
