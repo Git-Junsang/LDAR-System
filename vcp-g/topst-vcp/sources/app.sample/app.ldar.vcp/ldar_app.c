@@ -10,6 +10,7 @@
 #include "turn_can.h"
 #include "turn_led.h"
 #include "override.h"
+#include "override_can.h"
 #include "buzzer.h"
 
 #include <sal_api.h>
@@ -37,6 +38,16 @@ static const char *TurnName(TurnSignal_t t)
         case TURN_RIGHT: return "R";
         case TURN_OFF:
         default:         return "-";
+    }
+}
+
+static const char *OvrName(OverrideMode_t m)
+{
+    switch (m) {
+        case OVR_MODE_LIMIT: return "LIM";
+        case OVR_MODE_STOP:  return "STP";
+        case OVR_MODE_NONE:
+        default:             return "-";
     }
 }
 
@@ -86,37 +97,46 @@ void LDAR_Run(void)
     TurnCan_Init();
     TurnLed_Init();
     Override_Init();
+    OverrideCan_Init();
     Buzzer_Init();
 
-    mcu_printf("\n[LDAR] Phase 1 full loop started (GPIO+ADC+PWM+CAN)\n");
+    mcu_printf("\n[LDAR] manual drive + sign speed-override loop started (GPIO+ADC+PWM+CAN)\n");
 
     uint32_t   tick = 0U;
     MotorDir_t prev = MOTOR_DIR_STOP;
 
     while (1) {
+        OverrideCan_Poll();   /* CAN 0x110(Speed Override) 수신 → override 상태 갱신 */
+
         uint32_t       sw    = JoystickSW_Read();
         JoystickAxes_t axes  = JoystickAdc_Read();
         TurnSignal_t   ts    = TurnSignal_Update();
-        OverrideDir_t  ovr   = Override_Get();
+        OverrideMode_t ovr   = Override_GetMode();
 
         MotorDir_t     dir   = DecideDir(sw, axes.vry);
-        uint8_t        duty  = DutyFromVry(dir, axes.vry);
-        uint8_t        angle = AngleFromVrx(axes.vrx);
+        uint8_t        reqD  = DutyFromVry(dir, axes.vry);
+        uint8_t        duty  = Override_ApplyDuty(reqD);  /* 상한/정지 적용(부드러운 슬루) */
+        uint8_t        angle = AngleFromVrx(axes.vrx);    /* 조향은 항상 조이스틱(오버라이드 없음) */
+
+        /* 정지 오버라이드가 0%까지 감속 완료되면 능동 브레이크로 정지 유지 */
+        if ((ovr == OVR_MODE_STOP) && (duty == 0U)) {
+            dir = MOTOR_DIR_BRAKE;
+        }
 
         MotorDir_Set(dir);
         MotorPwm_SetDutyPercent(duty);
         ServoPwm_SetAngle(angle);
         TurnCan_SendIfChanged(ts);
         TurnLed_Update(ts, ovr, tick);
-        Buzzer_Set(((sw != 0U) || (ovr != OVR_NONE)) ? 1U : 0U);
+        Buzzer_Set(((sw != 0U) || (ovr != OVR_MODE_NONE)) ? 1U : 0U);
 
         if ((dir != prev) || ((tick % 50U) == 0U)) {
-            mcu_printf("\n[LDAR] sw=%d vrx=%d vry=%d (raw %d/%d) duty=%d%% angle=%d turn=%s dir=%s",
+            mcu_printf("\n[LDAR] sw=%d vrx=%d vry=%d duty=%d%%(req %d cap %d) angle=%d turn=%s dir=%s ovr=%s",
                        (int)sw,
                        (int)axes.vrx, (int)axes.vry,
-                       (int)axes.raw_vrx, (int)axes.raw_vry,
-                       (int)duty, (int)angle,
-                       TurnName(ts), DirName(dir));
+                       (int)duty, (int)reqD, (int)Override_GetCap(),
+                       (int)angle,
+                       TurnName(ts), DirName(dir), OvrName(ovr));
         }
         prev = dir;
         tick++;

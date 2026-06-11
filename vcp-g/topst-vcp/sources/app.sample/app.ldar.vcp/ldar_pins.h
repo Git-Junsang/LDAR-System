@@ -96,8 +96,12 @@
 /* 피에조 부저 — SW 누름 / 오버라이드 시 발음 */
 #define LDAR_PIN_BUZZER              GPIO_GPC(14)   /* [11] */
 
-/* T1.3 CAN — upstream 0x120 to D3-G via CAN channel 0 (J5D100 TX0/RX0). */
+/* CAN — channel 0 (J5D100 TX0/RX0).
+ *   상향 TX 0x120 : Driver Input(방향지시 의도) → D3-G
+ *   하향 RX 0x110 : Speed Override(표지판 속도제한/정지) ← D3-G
+ *                   표준ID RANGE 필터(0x101~0x200)→RXFIFO1 로 수신(can_par.c). */
 #define LDAR_CAN_CH                  (0U)
 #define LDAR_CAN_ID_DRIVER_INPUT     (0x120U)
+#define LDAR_CAN_ID_SPEED_OVERRIDE   (0x110U)
 
 #endif

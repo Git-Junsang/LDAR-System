@@ -9,8 +9,8 @@
 
 /* 상태 LED 4개:
  *  - 녹색 L/R : 방향지시(turn) 활성 쪽을 1Hz 깜박임
- *  - 적색 L/R : 속도 오버라이드 — LIMIT=양쪽 1Hz 깜박임, STOP=양쪽 점등, NONE=소등 */
+ *  - 적색 L/R : 오버라이드 보상 방향을 점등(고정) */
 void TurnLed_Init(void);
-void TurnLed_Update(TurnSignal_t turn, OverrideMode_t mode, uint32_t tick);
+void TurnLed_Update(TurnSignal_t turn, OverrideDir_t ovr, uint32_t tick);
 
 #endif

@@ -14,3 +14,4 @@ INCLUDES += -I$(MCU_BSP_APP_LDAR_BRIDGE_PATH)
 INCLUDES += -I$(MCU_BSP_APP_LDAR_BRIDGE_PATH)/../../../../shared
 
 SRCS += ldar_bridge.c
+SRCS += ldar_downstream.c
