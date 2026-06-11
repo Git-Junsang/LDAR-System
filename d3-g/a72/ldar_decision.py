@@ -48,6 +48,10 @@ SIGN_TO_CMD = {
     "none":     None,            # 표지판 없음 → 직전 명령 유지
 }
 
+# AI-G NPU cls 정수 → sign 문자열. ai-g/ai_model/dataset/data.yaml 순서 고정(재정렬 금지):
+#   0 Stop / 1 No Entry / 2 Speed_Limit_60 / 3 Speed_Limit_30
+CLS_TO_SIGN = {0: "stop", 1: "no_entry", 2: "speed_60", 3: "speed_30"}
+
 
 @dataclass
 class Detection:
@@ -57,6 +61,18 @@ class Detection:
 
     @staticmethod
     def from_json(d):
+        # AI-G(NnAppMain) 포맷: {"boxes":[{"cls":int,"score":float,...}, ...]}
+        if "boxes" in d:
+            boxes = d.get("boxes") or []
+            if not boxes:
+                return Detection(ts=time.time(), sign="none", conf=0.0)
+            top = max(boxes, key=lambda b: float(b.get("score", 0.0)))  # 최고 점수 박스
+            score = float(top.get("score", 0.0))
+            if score > 1.0:                # score가 0~100 스케일이면 0~1로
+                score /= 100.0
+            sign = CLS_TO_SIGN.get(int(top.get("cls", -1)), "none")
+            return Detection(ts=time.time(), sign=sign, conf=score)
+        # 단순 포맷 fallback: {"ts":..,"sign":"speed_30","conf":0.92}
         return Detection(
             ts=float(d.get("ts", time.time())),
             sign=str(d.get("sign", "none")),
@@ -81,17 +97,15 @@ class MockSource:
 
 
 class TcpSource:
-    """AI-G 가 보내는 줄단위(JSON\\n) 표지판 검출을 수신."""
-    def __init__(self, host="0.0.0.0", port=9999):
-        self.srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.srv.bind((host, port))
-        self.srv.listen(1)
-        print(f"[TCP] AI-G 접속 대기 {host}:{port}")
-        self.conn, addr = self.srv.accept()
+    """AI-G(NnAppMain, TCP 서버)에 **클라이언트로 접속**해 줄단위(JSON\\n) 표지판 검출을 수신.
+       AI-G가 192.168.0.100:9999 서버라서 D3-G가 접속하는 쪽이다."""
+    def __init__(self, host="192.168.0.100", port=9999):
+        self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print(f"[TCP] AI-G 접속 시도 {host}:{port} ...")
+        self.conn.connect((host, port))
         self.conn.settimeout(1.0)
         self.buf = b""
-        print(f"[TCP] AI-G 연결됨 {addr}")
+        print(f"[TCP] AI-G 연결됨 {host}:{port}")
 
     def read(self):
         while b"\n" not in self.buf:
@@ -106,7 +120,10 @@ class TcpSource:
         line = line.strip()
         if not line:
             return None
-        return Detection.from_json(json.loads(line.decode("utf-8")))
+        try:
+            return Detection.from_json(json.loads(line.decode("utf-8")))
+        except (ValueError, json.JSONDecodeError):
+            return None   # 깨진 줄은 건너뜀
 
 
 # =========================================================
@@ -159,7 +176,7 @@ def main():
     ap = argparse.ArgumentParser(description="LDAR 판정·명령 앱 (D3-G A72) — 표지판 속도 오버라이드")
     ap.add_argument("--source", choices=["mock", "tcp"], default="mock")
     ap.add_argument("--port", type=int, default=9999)
-    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--host", default="192.168.0.100", help="AI-G TCP 서버 IP")
     ap.add_argument("--dev", default="/dev/tcc_ipc_micom")
     ap.add_argument("--dry-run", action="store_true", help="IPC 송신 없이 콘솔 출력만")
     args = ap.parse_args()
