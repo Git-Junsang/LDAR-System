@@ -57,3 +57,7 @@ desktop.ini
 # D3-G R5: WSL2 TCC805x BSP  → d3-g/r5 오버레이
 vcp-g/topst-vcp/
 d3-g/D3G-R5/
+
+# Claude
+.claude/
+CLAUDE.md

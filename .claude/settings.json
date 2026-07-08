@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cat c.c 2>/dev/null; echo \"---\"; ls -la C:/Users/Junsang/.claude/plans/ 2>/dev/null | head -5)",
-      "Read(//c/Users/Junsang/.claude/plans/**)",
-      "Bash(git rm *)"
-    ]
-  }
-}

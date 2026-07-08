@@ -1,3 +1,4 @@
+
 # LDAR-System
 
 [English](README.md) | **한국어**
@@ -33,11 +34,11 @@ Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72   (표지판 검�
                        VCP-G ──▶ 한계속도까지 부드럽게 감속/정지 (조향은 조이스틱 유지)
 ```
 
-| Zone    | Board              | 역할                                                                       | 하드웨어                                          |
-| ------- | ------------------ | -------------------------------------------------------------------------- | ------------------------------------------------- |
-| Sensing | **AI-G**           | PiCam → NPU 추론(YOLOv8) → **교통표지판 검출**(클래스+신뢰도) → TCP 송신    | A53 Quad + Enlight NPU 8TOPS, MIPI CSI-2          |
-| HPC     | **D3-G** (TCC8050) | 표지판 → **속도제한/정지 판정** → CAN 명령                                  | A72(Linux, 판정) + R5(FreeRTOS, IPC↔CAN)         |
-| Control | **VCP-G**          | 조이스틱 수동주행 + **속도 오버라이드 중재** + 모터·서보·LED·부저           | MCU + FreeRTOS, ADC/GPIO/PDM/I2C                  |
+| Zone    | Board                    | 역할                                                                             | 하드웨어                                  |
+| ------- | ------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------- |
+| Sensing | **AI-G**           | PiCam → NPU 추론(YOLOv8) →**교통표지판 검출**(클래스+신뢰도) → TCP 송신 | A53 Quad + Enlight NPU 8TOPS, MIPI CSI-2  |
+| HPC     | **D3-G** (TCC8050) | 표지판 →**속도제한/정지 판정** → CAN 명령                                | A72(Linux, 판정) + R5(FreeRTOS, IPC↔CAN) |
+| Control | **VCP-G**          | 조이스틱 수동주행 +**속도 오버라이드 중재** + 모터·서보·LED·부저        | MCU + FreeRTOS, ADC/GPIO/PDM/I2C          |
 
 **핵심 설계** — 수동 주행 루프는 VCP-G 로컬에서 완결(저지연). D3-G는 표지판→속도만 판정해 **CAN 0x110(Speed Override)으로 속도 상한/정지만 지시**한다. VCP-G는 그 명령을 받아 적용 상한을 틱마다 슬루-레이트로 이동시켜 **급변 없이 부드럽게** 감속/정지한다. 상한 아래에서는 조이스틱이 그대로 통과하고, **조향은 어떤 경우에도 운전자**가 쥔다.
 
@@ -57,13 +58,13 @@ Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72   (표지판 검�
 
 > 이 정수 인덱스가 그대로 NPU → D3-G 전선 위의 `cls` 값이 된다. **절대 재정렬 금지.**
 
-| 항목             | 사양                                                                                             |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
-| 보드(N-Dolphin)  | A53 Quad + **Enlight NPU 8TOPS**, RAM **2GB**(입력 해상도 과하게 X), Yocto Linux                  |
-| 카메라           | **OV5647**(RasPi Cam v1.3, MIPI CSI-2 15핀) → V4L2 `/dev/video2`, UYVY 1288×956                   |
-| 모델             | YOLOv8s fine-tune, 입력 **640×640(letterbox)**, NPU용 INT8 양자화                                 |
-| 툴체인           | Ultralytics(학습) → ONNX 6-출력 추출 → tc-nn-toolkit(Enlight 변환/양자화/컴파일) → `tcnnapp`      |
-| 출력             | TCP 서버 `192.168.0.100:9999`, 프레임당 JSON 한 줄                                                |
+| 항목            | 사양                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| 보드(N-Dolphin) | A53 Quad +**Enlight NPU 8TOPS**, RAM **2GB**(입력 해상도 과하게 X), Yocto Linux      |
+| 카메라          | **OV5647**(RasPi Cam v1.3, MIPI CSI-2 15핀) → V4L2 `/dev/video2`, UYVY 1288×956        |
+| 모델            | YOLOv8s fine-tune, 입력**640×640(letterbox)**, NPU용 INT8 양자화                          |
+| 툴체인          | Ultralytics(학습) → ONNX 6-출력 추출 → tc-nn-toolkit(Enlight 변환/양자화/컴파일) →`tcnnapp` |
+| 출력            | TCP 서버`192.168.0.100:9999`, 프레임당 JSON 한 줄                                              |
 
 **TCP 송신 포맷 (AI-G → D3-G)** — 프레임당 JSON 한 줄:
 
@@ -79,13 +80,13 @@ D3-G `ldar_decision.py`는 `{"ts":.., "sign":"speed_30", "conf":0.92}`(문자열
 
 **동작 시나리오 (표지판 → 속도)**
 
-| 표지판                 | D3-G 판정 | CAN 0x110 `[mode, km/h]` | VCP-G 동작                                                    |
-| ---------------------- | --------- | ------------------------ | ------------------------------------------------------------- |
-| 속도제한 30            | LIMIT 30  | `[0x01, 30]`             | 듀티 상한 30%까지 부드럽게 감속, 그 아래선 조이스틱 자유      |
-| 속도제한 60            | LIMIT 60  | `[0x01, 60]`             | 듀티 상한 60%까지 부드럽게 감속                              |
-| 정지 / 진입금지        | STOP      | `[0x02, 0]`              | 0%까지 부드럽게 감속 후 브레이크 정지                        |
-| (제한구역 종료)        | RELEASE   | `[0x00, 0]`              | 상한 해제 — 조이스틱 풀스로틀 복귀                           |
-| (표지판 없음)          | —         | (송신 안 함)             | 직전 명령 유지                                               |
+| 표지판          | D3-G 판정 | CAN 0x110`[mode, km/h]` | VCP-G 동작                                               |
+| --------------- | --------- | ------------------------- | -------------------------------------------------------- |
+| 속도제한 30     | LIMIT 30  | `[0x01, 30]`            | 듀티 상한 30%까지 부드럽게 감속, 그 아래선 조이스틱 자유 |
+| 속도제한 60     | LIMIT 60  | `[0x01, 60]`            | 듀티 상한 60%까지 부드럽게 감속                          |
+| 정지 / 진입금지 | STOP      | `[0x02, 0]`             | 0%까지 부드럽게 감속 후 브레이크 정지                    |
+| (제한구역 종료) | RELEASE   | `[0x00, 0]`             | 상한 해제 — 조이스틱 풀스로틀 복귀                      |
+| (표지판 없음)   | —        | (송신 안 함)              | 직전 명령 유지                                           |
 
 > 한계속도(km/h)는 모형차 듀티%에 1:1 대응(30 → 30%, 60 → 60%). 로컬 조이스틱 풀스로틀 듀티 상한은 펌웨어에서 90%(`MOTOR_DUTY_CAP_PCT`).
 
@@ -93,33 +94,33 @@ D3-G `ldar_decision.py`는 `{"ts":.., "sign":"speed_30", "conf":0.92}`(문자열
 
 **CAN 메시지 테이블** — 11-bit CAN ID, 채널 0. 하향(R5 → VCP)은 판정 결과, 상향(VCP → R5)은 운전자 의도.
 
-| 메시지                    | CAN ID | 방향     | Data                                        | 비고                          |
-| ------------------------- | ------ | -------- | ------------------------------------------- | ----------------------------- |
-| **Speed Override**        | **0x110** | R5 → VCP | `[0]` mode · `[1]` 한계속도(km/h)          | **표지판 속도 명령 (핵심)**   |
-| **Driver Input**          | **0x120** | VCP → R5 | `[0]` 방향지시(0 off / 1 L / 2 R)          | 상향 운전자 의도              |
-| Brake / Turn / Head Light | 0x101 / 0x102 / 0x104 | R5 → VCP | 교육용 기존 메시지 | 미사용                        |
+| 메시지                    | CAN ID                | 방향      | Data                                   | 비고                              |
+| ------------------------- | --------------------- | --------- | -------------------------------------- | --------------------------------- |
+| **Speed Override**  | **0x110**       | R5 → VCP | `[0]` mode · `[1]` 한계속도(km/h) | **표지판 속도 명령 (핵심)** |
+| **Driver Input**    | **0x120**       | VCP → R5 | `[0]` 방향지시(0 off / 1 L / 2 R)    | 상향 운전자 의도                  |
+| Brake / Turn / Head Light | 0x101 / 0x102 / 0x104 | R5 → VCP | 교육용 기존 메시지                     | 미사용                            |
 
 - **0x110 mode**: `0x00` RELEASE(상한 해제) / `0x01` LIMIT(상한 제한) / `0x02` STOP(정지). `[1]` 한계속도는 LIMIT일 때만 유효 — VCP-G가 듀티% 상한으로 1:1 적용.
 
 **통신 경로 요약**
 
-| 구간                 | 인터페이스                   | 주요 데이터                                 |
-| -------------------- | ---------------------------- | ------------------------------------------- |
-| Camera → AI-G        | MIPI CSI-2                   | RAW 영상 (OV5647 → UYVY `/dev/video2`)      |
-| AI-G → D3-G(A72)     | Ethernet TCP                 | 표지판 클래스, 신뢰도, 바운딩박스            |
-| 조이스틱 → VCP-G     | ADC(VRx/VRy) · GPIO(SW)      | 조향 · 속도 · 버튼                          |
-| VCP-G → D3-G(R5)     | Classical CAN 2.0 (11-bit)   | 방향지시 의도 (상향, **0x120**)             |
-| D3-G A72 ↔ R5        | IPC (`/dev/tcc_ipc_micom`)   | 교육용 IPC 패킷(SYNC·CMD·LEN·DATA·CRC16)    |
-| D3-G(R5) → VCP-G     | Classical CAN 2.0 (11-bit)   | **속도 오버라이드 (0x110)** — mode + 한계속도 |
-| VCP-G → Actuators    | GPIO · PDM(PWM) · I2C        | 방향핀 · PWM · LED · 부저                   |
+| 구간               | 인터페이스                   | 주요 데이터                                          |
+| ------------------ | ---------------------------- | ---------------------------------------------------- |
+| Camera → AI-G     | MIPI CSI-2                   | RAW 영상 (OV5647 → UYVY`/dev/video2`)             |
+| AI-G → D3-G(A72)  | Ethernet TCP                 | 표지판 클래스, 신뢰도, 바운딩박스                    |
+| 조이스틱 → VCP-G  | ADC(VRx/VRy) · GPIO(SW)     | 조향 · 속도 · 버튼                                 |
+| VCP-G → D3-G(R5)  | Classical CAN 2.0 (11-bit)   | 방향지시 의도 (상향,**0x120**)                 |
+| D3-G A72 ↔ R5     | IPC (`/dev/tcc_ipc_micom`) | 교육용 IPC 패킷(SYNC·CMD·LEN·DATA·CRC16)         |
+| D3-G(R5) → VCP-G  | Classical CAN 2.0 (11-bit)   | **속도 오버라이드 (0x110)** — mode + 한계속도 |
+| VCP-G → Actuators | GPIO · PDM(PWM) · I2C      | 방향핀 · PWM · LED · 부저                         |
 
 **모듈 맵**
 
-| 그룹           | 모듈                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| VCP-G 펌웨어   | `ldar_app`(메인 루프), `joystick_adc` / `joystick_sw`, `motor_dir` / `motor_pwm`, `servo_pwm`, `turn_signal` / `turn_led` / `turn_can`, `override` / `override_can`, `buzzer`, `pwm_util`; 핀 정의 `ldar_pins.h` |
-| D3-G A72       | `ldar_decision.py`(판정 앱), `ldar_can.py`(하향 0x110 IPC), `Library/IPC_Library.py`(CRC16 IPC transport)  |
-| D3-G R5        | `ldar_bridge.c`(상향 0x120 CAN→IPC), `ldar_downstream.c`(IPC→CAN 0x110), `shared/ldar_ipc_proto.h`         |
+| 그룹         | 모듈                                                                                                                                                                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VCP-G 펌웨어 | `ldar_app`(메인 루프), `joystick_adc` / `joystick_sw`, `motor_dir` / `motor_pwm`, `servo_pwm`, `turn_signal` / `turn_led` / `turn_can`, `override` / `override_can`, `buzzer`, `pwm_util`; 핀 정의 `ldar_pins.h` |
+| D3-G A72     | `ldar_decision.py`(판정 앱), `ldar_can.py`(하향 0x110 IPC), `Library/IPC_Library.py`(CRC16 IPC transport)                                                                                                                              |
+| D3-G R5      | `ldar_bridge.c`(상향 0x120 CAN→IPC), `ldar_downstream.c`(IPC→CAN 0x110), `shared/ldar_ipc_proto.h`                                                                                                                                   |
 
 > 상세 규격은 각 보드 README: [핀맵 · CAN 수신](vcp-g/README.md) · [판정 · IPC](d3-g/README.md) · [TCP 포맷](ai-g/README.md).
 
@@ -147,7 +148,6 @@ LDAR-System/
 │   └── flash/                #   플래시 패키지 (fwdn + .rom + flash.sh)
 │
 ├── documents/                # 발표 · 보고서 · 튜토리얼 PDF · BSP-API 스펙 (참고 자료)
-├── CLAUDE.md                 # 에이전트 작업 지침
 └── README.md                 # (이 문서) 프로젝트 정의의 단일 출처
 ```
 
@@ -159,12 +159,12 @@ LDAR-System/
 
 ### 요구 환경
 
-| 환경          | 용도                                                                              |
-| ------------- | --------------------------------------------------------------------------------- |
-| code-server   | VCP-G 펌웨어 빌드(BSP 오버레이 → `.rom`), D3-G A72 Python 판정 로직 검증           |
-| GPU PC        | YOLOv8 학습(ultralytics), ONNX export                                             |
-| WSL2 (Ubuntu) | tc-nn-toolkit(NPU 변환/양자화/컴파일), R5 BSP 빌드, VCP-G 플래시 · 콘솔           |
-| 보드          | AI-G(Ethernet 192.168.0.100), D3-G(A72 Linux + R5), VCP-G(MCU)                    |
+| 환경          | 용도                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| code-server   | VCP-G 펌웨어 빌드(BSP 오버레이 →`.rom`), D3-G A72 Python 판정 로직 검증 |
+| GPU PC        | YOLOv8 학습(ultralytics), ONNX export                                      |
+| WSL2 (Ubuntu) | tc-nn-toolkit(NPU 변환/양자화/컴파일), R5 BSP 빌드, VCP-G 플래시 · 콘솔   |
+| 보드          | AI-G(Ethernet 192.168.0.100), D3-G(A72 Linux + R5), VCP-G(MCU)             |
 
 ### 빠른 시작 — 하드웨어 없이 판정 로직
 
@@ -257,18 +257,18 @@ minicom -D /dev/ttyUSB0 -b 115200 -8  # 콘솔 (종료: Ctrl+A → Q)
 
 ### 산출물
 
-| 경로                              | 내용                                                                     |
-| --------------------------------- | ------------------------------------------------------------------------ |
+| 경로                                                      | 내용                                                                              |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `ai-g/ai_model/yolov8s.bin`, `yolov8s_extracted.onnx` | **스톡(80-class COCO) 참고용** — 4클래스 커스텀 컴파일에 그대로 쓰지 말 것 |
-| `vcp-g/flash/tcc70xx_pflash_boot_2M_ECC.rom`          | 빌드된 VCP-G 펌웨어 이미지(플래시 패키지)                               |
+| `vcp-g/flash/tcc70xx_pflash_boot_2M_ECC.rom`            | 빌드된 VCP-G 펌웨어 이미지(플래시 패키지)                                         |
 
 ### 문서
 
-| 경로                          | 내용                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------------- |
-| `documents/tutorials/`        | 텔레칩스 팹리스교육 과정(D01~D10) — Yocto/D3-G, VCP GPIO/ADC/PDM, CAN, AI모델(YOLO), SensingZone 등 |
-| `documents/d3g_references/`   | TCC805x MCU BSP-API 스펙 PDF(ADC, CAN, GPIO, IPC, PDM, ...) + Getting Started / User Guide |
-| `documents/`                  | 최종보고서(docx), 중간발표(pdf)                                                        |
+| 경로                          | 내용                                                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `documents/tutorials/`      | 텔레칩스 팹리스교육 과정(D01~D10) — Yocto/D3-G, VCP GPIO/ADC/PDM, CAN, AI모델(YOLO), SensingZone 등 |
+| `documents/d3g_references/` | TCC805x MCU BSP-API 스펙 PDF(ADC, CAN, GPIO, IPC, PDM, ...) + Getting Started / User Guide           |
+| `documents/`                | 최종보고서(docx), 중간발표(pdf)                                                                      |
 
 ### 하드웨어 함정 (반복해서 물린 것들)
 

@@ -33,11 +33,11 @@ Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72   (sign detection
                        VCP-G ──▶ smooth decel / stop up to the limit (joystick keeps steering)
 ```
 
-| Zone     | Board                | Role                                                                          | Hardware                                          |
-| -------- | -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| Sensing  | **AI-G**             | PiCam → NPU inference (YOLOv8) → **traffic-sign detection** (class + confidence) → TCP | A53 Quad + Enlight NPU 8TOPS, MIPI CSI-2          |
-| HPC      | **D3-G** (TCC8050)   | sign → **speed-limit / stop decision** → CAN command                          | A72 (Linux, decision) + R5 (FreeRTOS, IPC↔CAN)   |
-| Control  | **VCP-G**            | joystick manual driving + **speed-override arbitration** + motor · servo · LED · buzzer | MCU + FreeRTOS, ADC/GPIO/PDM/I2C                  |
+| Zone    | Board                    | Role                                                                                            | Hardware                                        |
+| ------- | ------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Sensing | **AI-G**           | PiCam → NPU inference (YOLOv8) →**traffic-sign detection** (class + confidence) → TCP  | A53 Quad + Enlight NPU 8TOPS, MIPI CSI-2        |
+| HPC     | **D3-G** (TCC8050) | sign →**speed-limit / stop decision** → CAN command                                     | A72 (Linux, decision) + R5 (FreeRTOS, IPC↔CAN) |
+| Control | **VCP-G**          | joystick manual driving +**speed-override arbitration** + motor · servo · LED · buzzer | MCU + FreeRTOS, ADC/GPIO/PDM/I2C                |
 
 **Core design** — the manual driving loop is completed locally on VCP-G (low latency). D3-G decides *only* sign → speed and issues **CAN 0x110 (Speed Override) — a speed ceiling / stop only**. VCP-G receives that command and slews its applied ceiling per tick with a slew-rate limit, so it decelerates/stops **smoothly, without jerk**. Below the ceiling the joystick passes through untouched, and **steering is the driver's in every case**.
 
@@ -57,13 +57,13 @@ Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72   (sign detection
 
 > This integer index *is* the `cls` value carried over the NPU → D3-G wire. **Never reorder it.**
 
-| Item             | Spec                                                                                          |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| Board (N-Dolphin)| A53 Quad + **Enlight NPU 8TOPS**, RAM **2GB** (don't over-size the input), Yocto Linux         |
-| Camera           | **OV5647** (RasPi Cam v1.3, MIPI CSI-2 15-pin) → V4L2 `/dev/video2`, UYVY 1288×956             |
-| Model            | YOLOv8s fine-tune, input **640×640 (letterbox)**, INT8-quantized for the NPU                   |
-| Toolchain        | Ultralytics (train) → ONNX 6-output extract → tc-nn-toolkit (Enlight convert / quantize / compile) → `tcnnapp` |
-| Output           | TCP server `192.168.0.100:9999`, one JSON line per frame                                       |
+| Item              | Spec                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Board (N-Dolphin) | A53 Quad +**Enlight NPU 8TOPS**, RAM **2GB** (don't over-size the input), Yocto Linux                  |
+| Camera            | **OV5647** (RasPi Cam v1.3, MIPI CSI-2 15-pin) → V4L2 `/dev/video2`, UYVY 1288×956                       |
+| Model             | YOLOv8s fine-tune, input**640×640 (letterbox)**, INT8-quantized for the NPU                                 |
+| Toolchain         | Ultralytics (train) → ONNX 6-output extract → tc-nn-toolkit (Enlight convert / quantize / compile) →`tcnnapp` |
+| Output            | TCP server`192.168.0.100:9999`, one JSON line per frame                                                          |
 
 **TCP output format (AI-G → D3-G)** — one JSON line per frame:
 
@@ -79,13 +79,13 @@ D3-G's `ldar_decision.py` expects `{"ts":.., "sign":"speed_30", "conf":0.92}` (s
 
 **Operation scenario (sign → speed)**
 
-| Sign                   | D3-G decision | CAN 0x110 `[mode, km/h]` | VCP-G behavior                                                      |
-| ---------------------- | ------------- | ------------------------ | ------------------------------------------------------------------ |
-| Speed limit 30         | LIMIT 30      | `[0x01, 30]`             | slew duty ceiling smoothly down to 30%; joystick free below that   |
-| Speed limit 60         | LIMIT 60      | `[0x01, 60]`             | slew duty ceiling smoothly down to 60%                             |
-| Stop / No entry        | STOP          | `[0x02, 0]`              | slew down to 0% then brake to a stop                              |
-| (limit-zone cleared)   | RELEASE       | `[0x00, 0]`              | ceiling released — joystick returns to full throttle              |
-| (no sign)              | —             | (not sent)               | hold the previous command                                         |
+| Sign                 | D3-G decision | CAN 0x110`[mode, km/h]` | VCP-G behavior                                                   |
+| -------------------- | ------------- | ------------------------- | ---------------------------------------------------------------- |
+| Speed limit 30       | LIMIT 30      | `[0x01, 30]`            | slew duty ceiling smoothly down to 30%; joystick free below that |
+| Speed limit 60       | LIMIT 60      | `[0x01, 60]`            | slew duty ceiling smoothly down to 60%                           |
+| Stop / No entry      | STOP          | `[0x02, 0]`             | slew down to 0% then brake to a stop                             |
+| (limit-zone cleared) | RELEASE       | `[0x00, 0]`             | ceiling released — joystick returns to full throttle            |
+| (no sign)            | —            | (not sent)                | hold the previous command                                        |
 
 > Limit speed (km/h) maps 1:1 to model-car duty % (30 → 30%, 60 → 60%). The local joystick full-throttle duty ceiling is 90% in firmware (`MOTOR_DUTY_CAP_PCT`).
 
@@ -93,33 +93,33 @@ D3-G's `ldar_decision.py` expects `{"ts":.., "sign":"speed_30", "conf":0.92}` (s
 
 **CAN message table** — 11-bit CAN ID, channel 0. Downstream (R5 → VCP) is the decision result; upstream (VCP → R5) is driver intent.
 
-| Message               | CAN ID | Direction | Data                                        | Note                              |
-| --------------------- | ------ | --------- | ------------------------------------------- | --------------------------------- |
-| **Speed Override**    | **0x110** | R5 → VCP | `[0]` mode · `[1]` limit speed (km/h)      | **the sign-speed command (core)** |
-| **Driver Input**      | **0x120** | VCP → R5 | `[0]` turn signal (0 off / 1 L / 2 R)      | upstream driver intent            |
-| Brake / Turn / Head Light | 0x101 / 0x102 / 0x104 | R5 → VCP | education-course legacy messages | unused                            |
+| Message                   | CAN ID                | Direction | Data                                       | Note                                    |
+| ------------------------- | --------------------- | --------- | ------------------------------------------ | --------------------------------------- |
+| **Speed Override**  | **0x110**       | R5 → VCP | `[0]` mode · `[1]` limit speed (km/h) | **the sign-speed command (core)** |
+| **Driver Input**    | **0x120**       | VCP → R5 | `[0]` turn signal (0 off / 1 L / 2 R)    | upstream driver intent                  |
+| Brake / Turn / Head Light | 0x101 / 0x102 / 0x104 | R5 → VCP | education-course legacy messages           | unused                                  |
 
 - **0x110 mode**: `0x00` RELEASE (ceiling released) / `0x01` LIMIT (ceiling capped) / `0x02` STOP. `[1]` is valid only for LIMIT — VCP-G applies it 1:1 as a duty-% ceiling.
 
 **Communication path summary**
 
-| Segment              | Interface                    | Payload                                     |
-| -------------------- | ---------------------------- | ------------------------------------------- |
-| Camera → AI-G        | MIPI CSI-2                   | RAW video (OV5647 → UYVY `/dev/video2`)     |
-| AI-G → D3-G (A72)    | Ethernet TCP                 | sign class, confidence, bounding box        |
-| Joystick → VCP-G     | ADC (VRx/VRy) · GPIO (SW)    | steering · speed · button                   |
-| VCP-G → D3-G (R5)    | Classical CAN 2.0 (11-bit)   | turn-signal intent (upstream, **0x120**)    |
-| D3-G A72 ↔ R5        | IPC (`/dev/tcc_ipc_micom`)   | education IPC packet (SYNC·CMD·LEN·DATA·CRC16) |
-| D3-G (R5) → VCP-G    | Classical CAN 2.0 (11-bit)   | **Speed Override (0x110)** — mode + limit   |
-| VCP-G → Actuators    | GPIO · PDM (PWM) · I2C       | direction pins · PWM · LED · buzzer         |
+| Segment            | Interface                    | Payload                                            |
+| ------------------ | ---------------------------- | -------------------------------------------------- |
+| Camera → AI-G     | MIPI CSI-2                   | RAW video (OV5647 → UYVY`/dev/video2`)          |
+| AI-G → D3-G (A72) | Ethernet TCP                 | sign class, confidence, bounding box               |
+| Joystick → VCP-G  | ADC (VRx/VRy) · GPIO (SW)   | steering · speed · button                        |
+| VCP-G → D3-G (R5) | Classical CAN 2.0 (11-bit)   | turn-signal intent (upstream,**0x120**)      |
+| D3-G A72 ↔ R5     | IPC (`/dev/tcc_ipc_micom`) | education IPC packet (SYNC·CMD·LEN·DATA·CRC16) |
+| D3-G (R5) → VCP-G | Classical CAN 2.0 (11-bit)   | **Speed Override (0x110)** — mode + limit   |
+| VCP-G → Actuators | GPIO · PDM (PWM) · I2C     | direction pins · PWM · LED · buzzer             |
 
 **Module map**
 
-| Group          | Modules                                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| Group          | Modules                                                                                                                                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | VCP-G firmware | `ldar_app` (main loop), `joystick_adc` / `joystick_sw`, `motor_dir` / `motor_pwm`, `servo_pwm`, `turn_signal` / `turn_led` / `turn_can`, `override` / `override_can`, `buzzer`, `pwm_util`; pins in `ldar_pins.h` |
-| D3-G A72       | `ldar_decision.py` (decision app), `ldar_can.py` (downstream 0x110 over IPC), `Library/IPC_Library.py` (CRC16 IPC transport) |
-| D3-G R5        | `ldar_bridge.c` (upstream 0x120 CAN→IPC), `ldar_downstream.c` (IPC→CAN 0x110), `shared/ldar_ipc_proto.h` |
+| D3-G A72       | `ldar_decision.py` (decision app), `ldar_can.py` (downstream 0x110 over IPC), `Library/IPC_Library.py` (CRC16 IPC transport)                                                                                                            |
+| D3-G R5        | `ldar_bridge.c` (upstream 0x120 CAN→IPC), `ldar_downstream.c` (IPC→CAN 0x110), `shared/ldar_ipc_proto.h`                                                                                                                              |
 
 > Detailed specs live in each board README: [pin map · CAN receive](vcp-g/README.md) · [decision · IPC](d3-g/README.md) · [TCP format](ai-g/README.md).
 
@@ -147,7 +147,6 @@ LDAR-System/
 │   └── flash/                #   flash package (fwdn + .rom + flash.sh)
 │
 ├── documents/                # presentation · report · tutorial PDFs · BSP-API specs (reference)
-├── CLAUDE.md                 # agent working guidelines
 └── README.md                 # (this document) single source of the project definition
 ```
 
@@ -161,10 +160,10 @@ LDAR-System/
 
 | Environment   | Used for                                                                            |
 | ------------- | ----------------------------------------------------------------------------------- |
-| code-server   | VCP-G firmware build (BSP overlay → `.rom`), D3-G A72 Python decision-logic check    |
-| GPU PC        | YOLOv8 training (ultralytics), ONNX export                                           |
-| WSL2 (Ubuntu) | tc-nn-toolkit (NPU convert/quantize/compile), R5 BSP build, VCP-G flash & console    |
-| Boards        | AI-G (Ethernet 192.168.0.100), D3-G (A72 Linux + R5), VCP-G (MCU)                    |
+| code-server   | VCP-G firmware build (BSP overlay →`.rom`), D3-G A72 Python decision-logic check |
+| GPU PC        | YOLOv8 training (ultralytics), ONNX export                                          |
+| WSL2 (Ubuntu) | tc-nn-toolkit (NPU convert/quantize/compile), R5 BSP build, VCP-G flash & console   |
+| Boards        | AI-G (Ethernet 192.168.0.100), D3-G (A72 Linux + R5), VCP-G (MCU)                   |
 
 ### Quick Start — decision logic, no hardware
 
@@ -257,18 +256,18 @@ Toolchain `/opt/gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi`. The pin map single so
 
 ### Artifacts
 
-| Path                              | Contents                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------ |
+| Path                                                      | Contents                                                                                            |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `ai-g/ai_model/yolov8s.bin`, `yolov8s_extracted.onnx` | **stock (80-class COCO) reference only** — do not compile as-is for the 4-class custom model |
-| `vcp-g/flash/tcc70xx_pflash_boot_2M_ECC.rom`          | built VCP-G firmware image (flash package)                              |
+| `vcp-g/flash/tcc70xx_pflash_boot_2M_ECC.rom`            | built VCP-G firmware image (flash package)                                                          |
 
 ### Documents
 
-| Path                          | Contents                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------- |
-| `documents/tutorials/`        | Telechips fabless-education course (D01~D10), incl. Yocto/D3-G, VCP GPIO/ADC/PDM, CAN, AI-model (YOLO), SensingZone |
-| `documents/d3g_references/`   | TCC805x MCU BSP-API specification PDFs (ADC, CAN, GPIO, IPC, PDM, ...) + Getting Started / User Guide |
-| `documents/`                  | Final report (docx), mid-term presentation (pdf)                                     |
+| Path                          | Contents                                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `documents/tutorials/`      | Telechips fabless-education course (D01~D10), incl. Yocto/D3-G, VCP GPIO/ADC/PDM, CAN, AI-model (YOLO), SensingZone |
+| `documents/d3g_references/` | TCC805x MCU BSP-API specification PDFs (ADC, CAN, GPIO, IPC, PDM, ...) + Getting Started / User Guide               |
+| `documents/`                | Final report (docx), mid-term presentation (pdf)                                                                    |
 
 ### Hardware gotchas (things we got bitten by repeatedly)
 
