@@ -1,121 +1,293 @@
-# LDAR — 표지판 인식 속도 오버라이드 시스템
+# LDAR-System
 
-**조이스틱 수동 주행 + AI 표지판 인식 속도/정지 자동 오버라이드 SDV 축소 구현**
+**English** | [한국어](README.ko.md)
 
-조이스틱으로 수동 주행하다 카메라가 교통표지판(속도제한 30/60, 정지·진입금지)을 인식하면
-시스템이 **속도를 강제로(부드럽게) 제한하거나 정지**시킨다. 상용차 표지판 인식·속도보조(ISA)를
-Telechips Zonal 아키텍처 모형 차량에서 재현하여 **카메라 → NPU 추론 → 판정 → CAN 제어 →
-액추에이션**을 End-to-End로 구현한다. 조향은 항상 운전자(조이스틱)가 쥔다 — 개입은 속도뿐.
+---
 
-> **코드네임 LDAR** — 원래 "Lane Departure Auto-Recovery"(차선이탈 자동복귀)였으나 표지판 기반
-> 속도 오버라이드로 방향 전환. 차선은 더 이상 인식하지 않는다. 구 설계 자료는 [backup/](backup/).
+**Traffic-sign speed-override SDV — a scaled Telechips 3-Zonal implementation**
 
-- 팀: **서준상**(전자전기 — 제어: VCP-G + D3-G), **정은진**(소프트웨어 — 인지: AI-G)
-- 학기: 2026년 1학기 중앙대 고급프로젝트 (TOPST Advanced Project)
+---
 
-## 문서
-| 문서 | 내용 |
-|---|---|
-| [docs/PROTOCOL.md](docs/PROTOCOL.md) | CAN 메시지 테이블 · IPC · 판정 매핑 · VCP-G 핀맵 |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 개발 환경 · 빌드 · 플래시 · 모듈 추가법 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 개발 현황 · Phase 태스크 · 자재 |
-| [d3-g/a72/README.md](d3-g/a72/README.md) | D3-G 판정·명령 앱 사용법 |
-| [backup/README.md](backup/README.md) | 구 차선이탈 설계 자료(참고용 보관) |
+## 1. Background
 
-## 시스템 구성 (3-Zonal)
+On a production car, a forward camera reads traffic signs and an Intelligent Speed Assist (ISA) function keeps the vehicle within the posted limit. LDAR-System reproduces that behavior on a small Telechips Zonal model car: while the driver steers manually with a joystick, a camera detects traffic signs (speed limit 30/60, stop, no-entry) and the system **smoothly forces the speed down or brings the car to a stop**.
 
-| Zone | Board | 역할 | 하드웨어 | 담당 |
-|---|---|---|---|---|
-| Sensing | **AI-G** | PiCam → NPU 추론(YOLOv8) → **교통표지판 검출**(클래스+신뢰도) | A53 Quad + NPU 8TOPS, MIPI CSI-2 | 정은진 |
-| HPC | **D3-G** (TCC8050) | 표지판 → **속도제한/정지 판정** | A72(Linux, 판정) + R5(FreeRTOS, IPC↔CAN) | 서준상 |
-| Control | **VCP-G** | 조이스틱 수동주행 + **속도 오버라이드 중재** + 모터·서보·LED·부저 | MCU + FreeRTOS, ADC/GPIO/PDM/I2C | 서준상 |
+- The full chain runs on the edge: **camera → NPU inference → decision → CAN control → actuation**, end-to-end.
+- **Steering is always the driver's — the only intervention is speed.** The manual driving loop stays local and low-latency; the override only ever lowers the speed ceiling.
+- Architecture is 3-Zonal: **AI-G** (perception) → **D3-G** (decision, A72 + R5) → **VCP-G** (drive & arbitration).
+
+> The codename **`LDAR`** is a leftover from the original topic "Lane Departure Auto-Recovery." **Lane detection has been dropped**; the current, fixed topic is **traffic-sign speed override**.
+
+---
+
+## 2. System Overview
 
 ```
-조이스틱(VRx/VRy/SW) ─ADC/GPIO─▶ VCP-G ─────▶ DC모터 · 서보  (로컬 즉시 제어, 저지연)
-                                    └─상향 CAN 0x120(방향지시)─▶ R5 ─IPC─▶ A72
-Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72  (표지판 검출 → 속도 판정)
+Joystick (VRx/VRy/SW) ─ADC/GPIO─▶ VCP-G ─────▶ DC motor · servo   (local, low-latency)
+                                    └─CAN 0x120 (turn signal, upstream)─▶ D3-G R5 ─IPC─▶ A72
+Camera ─MIPI CSI-2─▶ AI-G ─Ethernet TCP─▶ D3-G A72   (sign detection → speed decision)
                                             │ IPC
                                             ▼
-                       D3-G R5 ─CAN 0x110─▶ Speed Override (mode + 한계속도)
+                       D3-G R5 ─CAN 0x110─▶ Speed Override (mode + limit speed)
                                             ▼
-                       VCP-G ──▶ 한계속도까지 부드럽게 감속 / 정지 (조향은 조이스틱 유지)
+                       VCP-G ──▶ smooth decel / stop up to the limit (joystick keeps steering)
 ```
 
-**핵심 설계** — 수동 주행 루프는 VCP-G 로컬에서 완결(저지연). D3-G는 표지판→속도만 판정해
-**CAN 0x110(Speed Override)으로 속도 상한/정지만 지시**. VCP-G는 그 명령을 받아 적용 상한을
-틱마다 슬루-레이트로 이동시켜 **급변 없이 부드럽게** 감속/정지한다. 상한 아래에서는 조이스틱이
-그대로 통과하고, **조향은 어떤 경우에도 운전자**가 쥔다.
+| Zone     | Board                | Role                                                                          | Hardware                                          |
+| -------- | -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
+| Sensing  | **AI-G**             | PiCam → NPU inference (YOLOv8) → **traffic-sign detection** (class + confidence) → TCP | A53 Quad + Enlight NPU 8TOPS, MIPI CSI-2          |
+| HPC      | **D3-G** (TCC8050)   | sign → **speed-limit / stop decision** → CAN command                          | A72 (Linux, decision) + R5 (FreeRTOS, IPC↔CAN)   |
+| Control  | **VCP-G**            | joystick manual driving + **speed-override arbitration** + motor · servo · LED · buzzer | MCU + FreeRTOS, ADC/GPIO/PDM/I2C                  |
 
-## 통신 규격 (요약)
+**Core design** — the manual driving loop is completed locally on VCP-G (low latency). D3-G decides *only* sign → speed and issues **CAN 0x110 (Speed Override) — a speed ceiling / stop only**. VCP-G receives that command and slews its applied ceiling per tick with a slew-rate limit, so it decelerates/stops **smoothly, without jerk**. Below the ceiling the joystick passes through untouched, and **steering is the driver's in every case**.
 
-| 구간 | 규격 | 주요 데이터 |
-|---|---|---|
-| Camera → AI-G | MIPI CSI-2 | RAW 영상 |
-| AI-G → D3-G(A72) | Ethernet TCP | 표지판 클래스, 신뢰도, 타임스탬프 |
-| 조이스틱 → VCP-G | ADC(VRx/VRy)·GPIO(SW) | 조향·속도·버튼 |
-| VCP-G → D3-G(R5) | Classical CAN 2.0 | 방향지시 의도(상향, 0x120) |
-| D3-G A72 ↔ R5 | IPC (`/dev/tcc_ipc_micom`) | 헤더+명령+CRC |
-| D3-G(R5) → VCP-G | Classical CAN 2.0 (11-bit) | **속도 오버라이드(0x110)** — mode + 한계속도 |
-| VCP-G → Actuators | GPIO·PDM(PWM)·I2C | 방향핀·PWM·LED·부저 |
+---
 
-→ 전체 CAN 테이블·페이로드·핀맵은 [docs/PROTOCOL.md](docs/PROTOCOL.md).
+## 3. Architecture
 
-## 표지판 → 동작
+### 3.1 Perception Model — AI-G (YOLOv8)
 
-| 표지판 | D3-G 판정 | CAN 0x110 | VCP-G 동작 |
-|---|---|---|---|
-| 속도제한 30 | LIMIT, 30 | `[0]=1, [1]=30` | 듀티 상한 30%로 부드럽게 감속, 그 아래선 조이스틱 자유 |
-| 속도제한 60 | LIMIT, 60 | `[0]=1, [1]=60` | 듀티 상한 60%로 부드럽게 감속 |
-| 정지 / 진입금지 | STOP | `[0]=2` | 0%까지 부드럽게 감속 후 브레이크 정지 |
-| (제한구역 종료) | RELEASE | `[0]=0` | 상한 해제 — 조이스틱 풀스로틀 복귀 |
+**YOLOv8s traffic-sign detector**, 4 classes. The demo runs in a **fixed environment** (same lighting, PiCam, track, sign set), so the strategy is to deliberately overfit to that environment.
 
-> 한계속도(km/h)는 모형차 듀티%에 1:1로 대응(30→30%, 60→60%).
+**Classes (order is frozen; `ai_model/dataset/data.yaml` is the single source of truth):**
 
-## 디렉터리 구조
+```
+0 Stop   /   1 No Entry   /   2 Speed_Limit_60   /   3 Speed_Limit_30
+```
+
+> This integer index *is* the `cls` value carried over the NPU → D3-G wire. **Never reorder it.**
+
+| Item             | Spec                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| Board (N-Dolphin)| A53 Quad + **Enlight NPU 8TOPS**, RAM **2GB** (don't over-size the input), Yocto Linux         |
+| Camera           | **OV5647** (RasPi Cam v1.3, MIPI CSI-2 15-pin) → V4L2 `/dev/video2`, UYVY 1288×956             |
+| Model            | YOLOv8s fine-tune, input **640×640 (letterbox)**, INT8-quantized for the NPU                   |
+| Toolchain        | Ultralytics (train) → ONNX 6-output extract → tc-nn-toolkit (Enlight convert / quantize / compile) → `tcnnapp` |
+| Output           | TCP server `192.168.0.100:9999`, one JSON line per frame                                       |
+
+**TCP output format (AI-G → D3-G)** — one JSON line per frame:
+
+```json
+{"boxes":[{"cls":3,"score":0.92,"xmin":..,"ymin":..,"xmax":..,"ymax":..}]}
+```
+
+D3-G's `ldar_decision.py` expects `{"ts":.., "sign":"speed_30", "conf":0.92}` (string `sign`), so a **shim converts `cls(int) → sign(str)`** (by `data.yaml` order), `score → conf`, and picks the top box. See [d3-g/README.md](d3-g/README.md).
+
+> ⚠️ **Training golden rule** — training data must be **100% identical to the demo setup** (same PiCam, mount, resolution, sign set, lighting). Fix the mount first and shoot only through that camera. No phone captures, no re-mounting mid-way. USB webcams are unsupported by the AI-G spec (MIPI PiCam only); a webcam is for PC rehearsal only.
+
+### 3.2 Control & Communication Architecture
+
+**Operation scenario (sign → speed)**
+
+| Sign                   | D3-G decision | CAN 0x110 `[mode, km/h]` | VCP-G behavior                                                      |
+| ---------------------- | ------------- | ------------------------ | ------------------------------------------------------------------ |
+| Speed limit 30         | LIMIT 30      | `[0x01, 30]`             | slew duty ceiling smoothly down to 30%; joystick free below that   |
+| Speed limit 60         | LIMIT 60      | `[0x01, 60]`             | slew duty ceiling smoothly down to 60%                             |
+| Stop / No entry        | STOP          | `[0x02, 0]`              | slew down to 0% then brake to a stop                              |
+| (limit-zone cleared)   | RELEASE       | `[0x00, 0]`              | ceiling released — joystick returns to full throttle              |
+| (no sign)              | —             | (not sent)               | hold the previous command                                         |
+
+> Limit speed (km/h) maps 1:1 to model-car duty % (30 → 30%, 60 → 60%). The local joystick full-throttle duty ceiling is 90% in firmware (`MOTOR_DUTY_CAP_PCT`).
+
+**Override behavior** — `duty = min(joystick request, override ceiling)`. The applied ceiling moves toward its target per tick with a **slew-rate limit** (decel ≈ 100%/s, so 90% → 0% ≈ 0.9s). STOP brakes after reaching 0%. A red LED (LIMIT = 1Hz blink / STOP = solid) plus the buzzer indicate the override state.
+
+**CAN message table** — 11-bit CAN ID, channel 0. Downstream (R5 → VCP) is the decision result; upstream (VCP → R5) is driver intent.
+
+| Message               | CAN ID | Direction | Data                                        | Note                              |
+| --------------------- | ------ | --------- | ------------------------------------------- | --------------------------------- |
+| **Speed Override**    | **0x110** | R5 → VCP | `[0]` mode · `[1]` limit speed (km/h)      | **the sign-speed command (core)** |
+| **Driver Input**      | **0x120** | VCP → R5 | `[0]` turn signal (0 off / 1 L / 2 R)      | upstream driver intent            |
+| Brake / Turn / Head Light | 0x101 / 0x102 / 0x104 | R5 → VCP | education-course legacy messages | unused                            |
+
+- **0x110 mode**: `0x00` RELEASE (ceiling released) / `0x01` LIMIT (ceiling capped) / `0x02` STOP. `[1]` is valid only for LIMIT — VCP-G applies it 1:1 as a duty-% ceiling.
+
+**Communication path summary**
+
+| Segment              | Interface                    | Payload                                     |
+| -------------------- | ---------------------------- | ------------------------------------------- |
+| Camera → AI-G        | MIPI CSI-2                   | RAW video (OV5647 → UYVY `/dev/video2`)     |
+| AI-G → D3-G (A72)    | Ethernet TCP                 | sign class, confidence, bounding box        |
+| Joystick → VCP-G     | ADC (VRx/VRy) · GPIO (SW)    | steering · speed · button                   |
+| VCP-G → D3-G (R5)    | Classical CAN 2.0 (11-bit)   | turn-signal intent (upstream, **0x120**)    |
+| D3-G A72 ↔ R5        | IPC (`/dev/tcc_ipc_micom`)   | education IPC packet (SYNC·CMD·LEN·DATA·CRC16) |
+| D3-G (R5) → VCP-G    | Classical CAN 2.0 (11-bit)   | **Speed Override (0x110)** — mode + limit   |
+| VCP-G → Actuators    | GPIO · PDM (PWM) · I2C       | direction pins · PWM · LED · buzzer         |
+
+**Module map**
+
+| Group          | Modules                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| VCP-G firmware | `ldar_app` (main loop), `joystick_adc` / `joystick_sw`, `motor_dir` / `motor_pwm`, `servo_pwm`, `turn_signal` / `turn_led` / `turn_can`, `override` / `override_can`, `buzzer`, `pwm_util`; pins in `ldar_pins.h` |
+| D3-G A72       | `ldar_decision.py` (decision app), `ldar_can.py` (downstream 0x110 over IPC), `Library/IPC_Library.py` (CRC16 IPC transport) |
+| D3-G R5        | `ldar_bridge.c` (upstream 0x120 CAN→IPC), `ldar_downstream.c` (IPC→CAN 0x110), `shared/ldar_ipc_proto.h` |
+
+> Detailed specs live in each board README: [pin map · CAN receive](vcp-g/README.md) · [decision · IPC](d3-g/README.md) · [TCP format](ai-g/README.md).
+
+---
+
+## 4. Directory Structure
 
 ```
 LDAR-System/
-├── ai-g/                              # Sensing Zone (정은진): PiCam·NPU 추론(YOLOv8)·표지판 검출·TCP 송신
-│   ├── data_pipeline/                 #   학습 데이터: PiCam 촬영(capture.py)·프레임추출(extract_frames.py)
-│   ├── ai-g app/ · ai_model/ · qt/
+├── ai-g/                     # Sensing Zone: sign detection · NPU · TCP send
+│   ├── README.md             #   ★ AI-G setup (board · camera · training · deploy)
+│   ├── data_pipeline/        #   training-data capture / frame extract (vcap / uyvy2img / capture)
+│   ├── ai_model/             #   YOLOv8 train → ONNX → NPU convert (train.py / export_onnx.py / data.yaml)
+│   └── ai-g app/             #   on-board NPU inference runtime (tcnnapp / motrex_app)
 │
-├── d3-g/                              # HPC Zone (서준상)
-│   ├── a72/                           #   판정·명령 앱 (Python)
-│   │   ├── ldar_decision.py           #     TCP/Mock 표지판 입력 → 속도 명령 매핑
-│   │   ├── ldar_can.py                #     하향 CAN 0x110(Speed Override) — IPC 송신
-│   │   ├── Library/IPC_Library.py     #     IPC(CRC16) transport
-│   │   ├── ldar_listener.c · Makefile #     상향 0x120 IPC 수신 확인(C)
-│   │   └── README.md
-│   ├── r5/sources/app.ldar.bridge/    #   R5 LDAR 모듈 (CAN↔IPC 브리지)
-│   ├── shared/ldar_ipc_proto.h        #   A72↔R5 공용 IPC 헤더
-│   ├── D3G-R5/                        #   R5 BSP 풀트리 (외부 git)
-│   └── reference/                     #   유사 프로젝트 참고 원본 (src/ bin/ ipc-example/) — README 참조
+├── d3-g/                     # HPC Zone: decision · command
+│   ├── README.md             #   ★ D3-G setup (A72 app · R5 overlay · IPC/CAN)
+│   ├── a72/                  #   decision app (Python) — ldar_decision.py, ldar_can.py
+│   ├── r5/                   #   R5 LDAR overlay module (CAN↔IPC bridge, downstream)
+│   └── shared/               #   A72↔R5 shared IPC header (ldar_ipc_proto.h)
 │
-├── vcp-g/                             # Control Zone (서준상)
-│   ├── flash/                         #   플래시 패키지 (fwdn + .rom + flash.sh)
-│   └── topst-vcp/                     #   VCP-G BSP (untracked; LDAR 소스·산출물만 git -f)
-│       └── sources/app.sample/app.ldar.vcp/   # ldar_app/pins, joystick_adc/sw, motor_dir/pwm,
-│           # servo_pwm, turn_signal/led/can, override(+override_can), buzzer, pwm_util
+├── vcp-g/                    # Control Zone: drive · arbitration
+│   ├── README.md             #   ★ VCP-G setup (BSP-overlay build · flash · pin map)
+│   ├── app.ldar.vcp/         #   VCP-G LDAR firmware (our source, overlaid onto the BSP)
+│   └── flash/                #   flash package (fwdn + .rom + flash.sh)
 │
-├── backup/                            # 구 차선이탈 설계 자료(문서·D3-G 판정앱·VCP-G 조향 오버라이드)
-├── documents/                         # tutorials(D01–D10 PDF, VCP-G Docs) · d3g_references · Project_Presentation
-├── docs/                              # 분리된 상세 문서 (PROTOCOL/DEVELOPMENT/ROADMAP)
-├── CLAUDE.md                          # 에이전트 작업 지침 (정의 출처는 README/docs)
-└── README.md
+├── documents/                # presentation · report · tutorial PDFs · BSP-API specs (reference)
+├── CLAUDE.md                 # agent working guidelines
+└── README.md                 # (this document) single source of the project definition
 ```
 
-- **R5 BSP 두 군데**: 풀트리 `d3-g/D3G-R5/`(외부 git), LDAR 모듈 `d3-g/r5/...app.ldar.bridge/` — 빌드 시 오버레이
-- **VCP-G 두 군데**: BSP `vcp-g/topst-vcp/`(untracked), LDAR 모듈은 그 안 `app.ldar.vcp/`에 직접. 산출물·도구는 `vcp-g/flash/`로 모아 git 추적
+> **The BSP is not committed.** VCP-G / R5 firmware is built by overlaying our source onto the Telechips BSP (see each folder's "Build"). The repo keeps only the files we wrote. Data (`ai-g/data_pipeline/data/`, `ai-g/ai_model/dataset/` video/frames/labels) is git-ignored for size — code only.
 
-## 현황 (요약)
-- ✅ 환경/기초(D01–D06) + 제어 아키텍처 확정
-- ✅ **VCP-G 수동주행**(조이스틱·모터·서보·방향지시 토글·부저)
-- ✅ **VCP-G 속도 오버라이드** — CAN 0x110 수신 → 부드러운 감속/정지(컴파일·ROM 검증) + **D3-G 판정앱**(표지판→명령, Mock 검증)
-- 🟧 **인지(AI-G)** — YOLOv8 표지판 검출 학습·보드 탑재 진행
-- 🟧 제어 Phase 3 통합(R5 하향 IPC→CAN 0x110 송신, AI-G→D3-G TCP 연동)
-- ⬜ Phase 4 통합·튜닝, 데모
+---
 
-→ 상세 단계·자재는 [docs/ROADMAP.md](docs/ROADMAP.md).
+## 5. Getting Started
 
-## 참고 코드 출처
-텔레칩스 교육 코드 + 유사 프로젝트(자율주행 RC)를 적응 — 원본은 [d3-g/reference/](d3-g/reference/)에 정리(파일명/내용 매핑은 그 README 참조).
+### Requirements
+
+| Environment   | Used for                                                                            |
+| ------------- | ----------------------------------------------------------------------------------- |
+| code-server   | VCP-G firmware build (BSP overlay → `.rom`), D3-G A72 Python decision-logic check    |
+| GPU PC        | YOLOv8 training (ultralytics), ONNX export                                           |
+| WSL2 (Ubuntu) | tc-nn-toolkit (NPU convert/quantize/compile), R5 BSP build, VCP-G flash & console    |
+| Boards        | AI-G (Ethernet 192.168.0.100), D3-G (A72 Linux + R5), VCP-G (MCU)                    |
+
+### Quick Start — decision logic, no hardware
+
+```bash
+cd d3-g/a72
+python3 ldar_decision.py --source mock --dry-run   # cycle sign scenarios, console only
+```
+
+### AI-G — data pipeline → training → NPU deploy
+
+```bash
+# 1) Capture on the board (static binary, zero deps) — UYVY raw per sign class
+./vcap /home/root/data/speed_30 speed_30 60 5        # <outdir> <prefix> <count> <skip>
+# 2) Convert on PC: UYVY raw → jpg (resize to 640)
+python3 uyvy2img.py data/raw_uyvy --out data/frames --src-size 1288x956 --scale 640x640 --dedup 4.0
+# 3) Label (bbox, 4 classes) → train on GPU PC
+cd ai-g/ai_model
+python3 train.py --epochs 120 --imgsz 640 --batch 16 --device 0
+# 4) Export ONNX (6-output extract; [verify] must show cv3.*=4ch, not 80ch)
+python3 export_onnx.py --weights runs/detect/signs_yolov8s/weights/best.pt
+# 5) tc-nn-toolkit (WSL): converter → quantizer → compiler → net.so   (see ai-g/ai_model/README.md)
+# 6) Deploy the whole model folder to the board, then:
+tcnnapp -n yolov8s_signs_quantized -p /dev/video2
+```
+
+Full walkthrough: [ai-g/README.md](ai-g/README.md) · [ai-g/data_pipeline/README.md](ai-g/data_pipeline/README.md) · [ai-g/ai_model/README.md](ai-g/ai_model/README.md).
+
+### D3-G — decision app & downstream bridge
+
+```bash
+cd d3-g/a72
+python3 ldar_decision.py --source mock --dry-run     # mapping check, console only
+python3 ldar_decision.py --source mock               # real IPC send (sudo required)
+python3 ldar_decision.py --source tcp --port 9999    # receive real AI-G over TCP
+```
+
+`/dev/tcc_ipc_micom` access needs root. The R5 downstream bridge (IPC → CAN 0x110) is built in WSL2 on the Telechips R5 BSP — overlay `r5/sources/app.ldar.bridge/`, call `LdarDownstream_Init()`, and replace the IPC-recv placeholder with the real BSP API. See [d3-g/README.md](d3-g/README.md).
+
+### VCP-G — BSP-overlay build, flash, console
+
+```bash
+# --- build on code-server ---
+cd vcp-g
+git clone https://github.com/topst-development/FreeRTOS-VCP topst-vcp    # BSP (not in repo)
+cd topst-vcp && ./easy-setup_vcp-g.sh -e
+cp -r ../app.ldar.vcp sources/app.sample/app.ldar.vcp                    # + 3 integration edits (OVERLAY.md)
+cd build/tcc70xx/gcc
+make MCU_BSP_BUILD_FLAGS_TEST_APP_ADC=1 MCU_BSP_BUILD_FLAGS_TEST_APP_CAN=1
+#   → output/tcc70xx_pflash_boot_2M_ECC.rom
+cp output/tcc70xx_pflash_boot_2M_ECC.rom ../../../../flash/
+
+# --- flash & console on local Windows + WSL2 ---
+cd vcp-g/flash && ./flash.sh          # fwdn --fwdn vcp_fwdn.rom -w tcc70xx_pflash_boot_2M_ECC.rom
+minicom -D /dev/ttyUSB0 -b 115200 -8  # console (exit: Ctrl+A → Q)
+```
+
+Toolchain `/opt/gcc-linaro-7.2.1-2017.11-x86_64_arm-eabi`. The pin map single source is [vcp-g/app.ldar.vcp/ldar_pins.h](vcp-g/app.ldar.vcp/ldar_pins.h) — change wiring there only. Full procedure and overlay points: [vcp-g/README.md](vcp-g/README.md) + [vcp-g/app.ldar.vcp/OVERLAY.md](vcp-g/app.ldar.vcp/OVERLAY.md).
+
+---
+
+## 6. Development Status
+
+**Current state — manual driving and speed override verified on VCP-G; perception and integration in progress.** VCP-G manual driving (joystick · motor · servo · turn signal · buzzer) runs on real firmware, and speed override (CAN 0x110 → smooth decel/stop) is compile/ROM/flash-verified. The D3-G decision app maps sign → speed with a confidence threshold and CONFIRM debounce (Mock-verified), and the downstream CAN path (`ldar_can.py` + R5 `ldar_downstream.c`) is host-interop-verified. Remaining work is AI-G perception (YOLOv8 on the NPU), the R5 IPC → CAN 0x110 bridge on real hardware, and the AI-G → D3-G TCP link.
+
+### Done
+
+- [X] **Environment / basics** — Yocto/D3-G, VCP-G peripherals, CAN/IPC, Control Zone, AI-G + NPU basics
+- [X] **VCP-G manual driving** — joystick ADC · DC motor (L298N) · servo · turn-signal toggle · buzzer (firmware runs)
+- [X] **D3-G decision app** — sign → speed mapping (`SIGN_TO_CMD`) + confidence threshold + CONFIRM debounce (Mock-verified)
+- [X] **VCP-G speed override** — CAN 0x110 receive → applied-ceiling slew (smooth decel/stop) (compile · ROM · flash-verified)
+- [X] **D3-G downstream CAN** — `ldar_can.py` (limit/stop/release) + R5 `ldar_downstream.c` (host-interop-verified)
+
+### In progress
+
+- [ ] **Perception (AI-G)** — YOLOv8 sign detection training (4 classes) · ONNX → NPU convert · on-board deploy
+- [ ] **R5 downstream bridge** — A72 IPC → CAN 0x110 send (WSL2 R5 build + real BSP IPC-recv API swap)
+- [ ] **AI-G → D3-G TCP link** — sign-packet shim (`cls → sign`) + Mock → real swap
+
+### Integration · demo
+
+- [ ] Full flow camera → NPU → decision → CAN → actuation (E2E)
+- [ ] Slew-rate / confidence-threshold tuning, edge cases (misdetection, restart after stop)
+- [ ] Five demo scenarios (normal / limit 30 / limit 60 / stop / release) pass stably
+- [ ] (optional) Qt cluster app — visualize speed ceiling & override state
+- [ ] Final demo video + presentation deck
+
+---
+
+## 7. Extras
+
+### Artifacts
+
+| Path                              | Contents                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `ai-g/ai_model/yolov8s.bin`, `yolov8s_extracted.onnx` | **stock (80-class COCO) reference only** — do not compile as-is for the 4-class custom model |
+| `vcp-g/flash/tcc70xx_pflash_boot_2M_ECC.rom`          | built VCP-G firmware image (flash package)                              |
+
+### Documents
+
+| Path                          | Contents                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `documents/tutorials/`        | Telechips fabless-education course (D01~D10), incl. Yocto/D3-G, VCP GPIO/ADC/PDM, CAN, AI-model (YOLO), SensingZone |
+| `documents/d3g_references/`   | TCC805x MCU BSP-API specification PDFs (ADC, CAN, GPIO, IPC, PDM, ...) + Getting Started / User Guide |
+| `documents/`                  | Final report (docx), mid-term presentation (pdf)                                     |
+
+### Hardware gotchas (things we got bitten by repeatedly)
+
+- **All buttons / joystick SW are active-low** — pin → button → GND, internal pull-up, pressed = 0. Pull-down / active-high stays 0 forever.
+- **Joystick VCC is 3.3V** — on 5V, neutral floats to raw ~3100 and one axis clips at ADC 3.3V.
+- **The DC motor is open-loop PWM** — duty *is* the average voltage, so speed and torque move together. The speed ceiling is the override lever.
+- **No SocketCAN on the A72** → `candump` unavailable. Observe CAN via an external USB-CAN analyzer or the R5/VCP console log.
+- If the console dies but the DC motor still runs, suspect a **3.3V logic-rail brownout** (wiring/short).
+- **AI-G golden rule** — fixed-demo overfit strategy → training data must equal the demo setup 100% (same PiCam, mount, resolution, sign set, lighting).
+
+### Data note
+
+`ai-g/data_pipeline/data/` and `ai-g/ai_model/dataset/` (video / frames / labels) are git-ignored for size — code only. The current `dataset/` is built from public sets (GTSRB/Roboflow, European signs); re-shoot with the demo setup for reliable recognition.
+
+---
+
+## 8. References
+
+- [Telechips TOPST](https://topst.ai/) — TCC8050 (D3-G) / TCC70xx (VCP-G) Zonal platform & fabless-education course
+- [FreeRTOS-VCP BSP](https://github.com/topst-development/FreeRTOS-VCP) — VCP-G firmware base (overlaid, not committed)
+- [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — traffic-sign detector base architecture
+- [GTSRB](https://benchmark.ini.rub.de/gtsrb_news.html) — German Traffic Sign Recognition Benchmark (public-set reference)

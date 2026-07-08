@@ -56,6 +56,6 @@ python3 ldar_decision.py --source tcp --port 9999
    **남은 것**: WSL2 R5 환경에서 빌드, `Tcc_Ipc_Recv` 플레이스홀더를 실제 BSP IPC 수신 API로 교체,
    `LdarDownstream_Init()` 호출 추가. (대안: 교육용 CAN demo 활성화 — 같은 CMD1=0x05를 BSP가 처리.)
    상향(0x120 CAN→IPC)은 `ldar_bridge.c`에 이미 있음.
-2. **VCP-G** — 0x110 **CAN 수신** 완료([override_can.c](../../vcp-g/topst-vcp/sources/app.sample/app.ldar.vcp/override_can.c)).
+2. **VCP-G** — 0x110 **CAN 수신** 완료([override_can.c](../../vcp-g/app.ldar.vcp/override_can.c)).
    수신 → `Override_SetLimit/SetStop/Release` → 부드러운 감속/정지(컴파일·ROM 검증).
 3. **AI-G 연동(0x110 상위)** — 실제 표지판 검출을 `--source tcp`로 연결 (현재 Mock 시나리오).

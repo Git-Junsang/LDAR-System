@@ -9,7 +9,7 @@ VCP-G에 '속도제한 / 정지 / 해제' 중 하나를 CAN 0x110으로 명령�
 → R5가 CAN 채널 0으로 송신 → VCP-G가 수신(override_can.c)해 부드럽게 감속/정지.
 (transport 는 검증된 Library/IPC_Library.py 재사용)
 
-CAN 표는 docs/PROTOCOL.md / VCP-G ldar_pins.h 와 일치:
+CAN 표는 ../README.md / VCP-G app.ldar.vcp/ldar_pins.h 와 일치:
   0x110 Speed Override  data[0]=mode(0 RELEASE/1 LIMIT/2 STOP), data[1]=limit(km/h≈duty%)
 """
 

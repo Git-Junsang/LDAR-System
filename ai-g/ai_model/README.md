@@ -2,7 +2,7 @@
 
 YOLOv8s 4클래스(`0 Stop / 1 No Entry / 2 Speed_Limit_60 / 3 Speed_Limit_30`) 표지판
 검출기를 학습해 TOPST **AI-G(N-Dolphin, Enlight NPU 8TOPS)**에 올리는 전 과정.
-정본 근거 = `documents/tutorials/D06-T06-AI모델적용(Yolo).pdf` + `d3-g/reference` 코드.
+정본 근거 = `documents/tutorials/(텔레칩스)팹리스교육과정D06-T06-AI모델적용(Yolo).pdf`.
 
 > **클래스 순서(0~3)는 라벨 .txt가 고정**한다. 이 정수 인덱스가 그대로 NPU→D3-G 전선 위의
 > `cls` 값이 된다. **절대 재정렬 금지.** (`dataset/data.yaml`이 단일 출처)
@@ -123,7 +123,7 @@ tcnnapp -n yolov8s_signs_quantized -p /dev/video2
 
 ## 6) D3-G 연동 — 포맷 변환 shim 필요 ⚠️
 
-이 프로젝트 커스텀 AI-G 빌드(`d3-g/reference` NnAppMain)는 **TCP 서버 `192.168.0.100:9999`**,
+이 프로젝트 커스텀 AI-G 빌드(`tcnnapp` NnAppMain)는 **TCP 서버 `192.168.0.100:9999`**,
 프레임당 JSON 한 줄을 송신:
 ```json
 {"boxes":[{"cls":3,"score":0.92,"xmin":..,"ymin":..,"xmax":..,"ymax":..}]}

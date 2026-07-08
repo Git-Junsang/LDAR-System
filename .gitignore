@@ -52,7 +52,8 @@ desktop.ini
 *.tmp
 *.cache
 
-# --- Backup stash (트리에서 들어낸 중복본 / 빌드 산출물 — 추적 안 함) ---
-# 기존 추적 파일(중간발표 PDF)은 그대로 유지되고, 아래 항목만 무시
-backup/topst-vcp-edu/
-backup/vcp-g/
+# --- Telechips BSP (리포에 포함 안 함 — 빌드 시 clone 후 오버레이) ---
+# VCP-G:  git clone .../FreeRTOS-VCP vcp-g/topst-vcp  → app.ldar.vcp 오버레이
+# D3-G R5: WSL2 TCC805x BSP  → d3-g/r5 오버레이
+vcp-g/topst-vcp/
+d3-g/D3G-R5/
